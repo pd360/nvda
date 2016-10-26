@@ -87,6 +87,8 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 	}
 
 class BookPageViewTextInfo(IA2TextTextInfo):
+	# No need for end insertion point as this is not editable.
+	allowMoveToOffsetPastEnd = False
 
 	def _get_locationText(self):
 		curLocation=self.obj.IA2Attributes.get('kindle-first-visible-location-number')
