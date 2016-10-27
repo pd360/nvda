@@ -22,15 +22,30 @@ from globalCommands import SCRCAT_SYSTEMCARET
 class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,BrowseModeDocumentTreeInterceptor):
 
 	TextInfo=treeInterceptorHandler.RootProxyTextInfo
+	pageChangeAlreadyHandled = False
 
 	def turnPage(self,previous=False):
 		# When in a page turn, Kindle  fires focus on the new page in the table of contents treeview.
 		# We must ignore this focus event as it is a hinderance to a screen reader user while reading the book.
 		try:
 			self.rootNVDAObject.appModule.inPageTurn=True
-			return self.rootNVDAObject.turnPage(previous=previous)
+			self.rootNVDAObject.turnPage(previous=previous)
+			# turnPage waits for a pageChange event before returning,
+			# but the pageChange event will still get fired.
+			# We need to know that we've already handled it.
+			self.pageChangeAlreadyHandled=True
 		finally:
 			self.rootNVDAObject.appModule.inPageTurn=False
+
+	def event_pageChange(self, obj, nextHandler):
+		if self.pageChangeAlreadyHandled:
+			# This page change has already been handled.
+			self.pageChangeAlreadyHandled = False
+			return
+		info = self.makeTextInfo(textInfos.POSITION_FIRST)
+		self.selection = info
+		info.expand(textInfos.UNIT_LINE)
+		speech.speakTextInfo(info, unit=textInfos.UNIT_LINE, reason=controlTypes.REASON_CARET)
 
 	def isAlive(self):
 		return winUser.isWindow(self.rootNVDAObject.windowHandle)
