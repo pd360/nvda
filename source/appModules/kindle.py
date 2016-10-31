@@ -103,14 +103,11 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 	}
 
 class BookPageViewTextInfo(MozillaCompoundTextInfo):
-	# No need for end insertion point as this is not editable.
-	allowMoveToOffsetPastEnd = False
 
 	def _get_locationText(self):
-		root=self.obj.rootNVDAObject
-		curLocation=root.IA2Attributes.get('kindle-first-visible-location-number')
-		maxLocation=root.IA2Attributes.get('kindle-max-location-number')
-		pageNumber=root.pageNumber
+		curLocation=self.obj.IA2Attributes.get('kindle-first-visible-location-number')
+		maxLocation=self.obj.IA2Attributes.get('kindle-max-location-number')
+		pageNumber=self.obj.pageNumber
 		# Translators: A position in a Kindle book
 		# xgettext:no-python-format
 		text=_("{bookPercentage}%, location {curLocation} of {maxLocation}").format(bookPercentage=int((float(curLocation)/float(maxLocation))*100),curLocation=curLocation,maxLocation=maxLocation)
@@ -119,11 +116,13 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 			text+=", "+_("Page {pageNumber}").format(pageNumber=pageNumber)
 		return text
 
-	def _getFormatFieldAndOffsets(self,offset,formatConfig,calculateOffsets=True):
-		formatField,offsets=super(BookPageViewTextInfo,self)._getFormatFieldAndOffsets(offset,formatConfig,calculateOffsets=calculateOffsets)
-		if formatConfig['reportPage']:
-			formatField['page-number']=self.obj.pageNumber
-		return formatField,offsets
+	def getTextWithFields(self, formatConfig=None):
+		items = super(BookPageViewTextInfo, self).getTextWithFields(formatConfig=formatConfig)
+		for item in items:
+			if isinstance(item, textInfos.FieldCommand) and item.command == "formatChange":
+				if formatConfig['reportPage']:
+					item.field['page-number'] = self.obj.pageNumber
+		return items
 
 class BookPageView(DocumentWithPageTurns,IAccessible):
 	"""Allows navigating page text content with the arrow keys."""
