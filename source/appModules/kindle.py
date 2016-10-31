@@ -16,8 +16,9 @@ from cursorManager import ReviewCursorManager
 from browseMode import BrowseModeDocumentTreeInterceptor
 import textInfos
 from textInfos import DocumentWithPageTurns
-from NVDAObjects.IAccessible import IAccessible, IA2TextTextInfo
+from NVDAObjects.IAccessible import IAccessible
 from globalCommands import SCRCAT_SYSTEMCARET
+from NVDAObjects.IAccessible.ia2TextMozilla import MozillaCompoundTextInfo
 
 class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,BrowseModeDocumentTreeInterceptor):
 
@@ -101,14 +102,15 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		"kb:shift+f10": "finalizeSelection",
 	}
 
-class BookPageViewTextInfo(IA2TextTextInfo):
+class BookPageViewTextInfo(MozillaCompoundTextInfo):
 	# No need for end insertion point as this is not editable.
 	allowMoveToOffsetPastEnd = False
 
 	def _get_locationText(self):
-		curLocation=self.obj.IA2Attributes.get('kindle-first-visible-location-number')
-		maxLocation=self.obj.IA2Attributes.get('kindle-max-location-number')
-		pageNumber=self.obj.pageNumber
+		root=self.obj.rootNVDAObject
+		curLocation=root.IA2Attributes.get('kindle-first-visible-location-number')
+		maxLocation=root.IA2Attributes.get('kindle-max-location-number')
+		pageNumber=root.pageNumber
 		# Translators: A position in a Kindle book
 		# xgettext:no-python-format
 		text=_("{bookPercentage}%, location {curLocation} of {maxLocation}").format(bookPercentage=int((float(curLocation)/float(maxLocation))*100),curLocation=curLocation,maxLocation=maxLocation)

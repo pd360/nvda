@@ -165,9 +165,9 @@ class MozillaCompoundTextInfo(CompoundTextInfo):
 		descendantOffset=ctypes.c_int()
 		what = self.FINDCONTENTDESCENDANT_POSITIONS.get(position, position)
 		NVDAHelper.localLib.nvdaInProcUtils_IA2Text_findContentDescendant(obj.appModule.helperLocalBindingHandle,obj.windowHandle,obj.IAccessibleObject.uniqueID,what,ctypes.byref(descendantID),ctypes.byref(descendantOffset))
-		if descendantID.value == 0:
+		#if descendantID.value == 0:
 			# No descendant.
-			raise LookupError("Object has no text descendants")
+			#raise LookupError("Object has no text descendants")
 		if position == self.POSITION_SELECTION_END:
 			# As we descend, we need the last offset (not the exclusive end offset),
 			# but we want the exclusive end as the final result.
