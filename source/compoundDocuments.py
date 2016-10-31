@@ -153,6 +153,10 @@ class CompoundTextInfo(textInfos.TextInfo):
 		return field
 
 	def __eq__(self, other):
+		if self is other:
+			return True
+		if type(self) is not type(other):
+			return False
 		return self._start == other._start and self._startObj == other._startObj and self._end == other._end and self._endObj == other._endObj
 
 	def __ne__(self, other):
