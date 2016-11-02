@@ -58,9 +58,10 @@ class MozillaCompoundTextInfo(CompoundTextInfo):
 	def __init__(self, obj, position):
 		super(MozillaCompoundTextInfo, self).__init__(obj, position)
 		if isinstance(position, NVDAObject):
-			# FIXME
-			position = textInfos.POSITION_CARET
-		if isinstance(position, self.__class__):
+			self._start, self._startObj = self._findContentDescendant(position, textInfos.POSITION_FIRST)
+			self._end, self._endObj = self._findContentDescendant(position, textInfos.POSITION_LAST)
+			self._normalizeStartAndEnd()
+		elif isinstance(position, self.__class__):
 			self._start = position._start.copy()
 			self._startObj = position._startObj
 			if position._end is position._start:
@@ -165,9 +166,9 @@ class MozillaCompoundTextInfo(CompoundTextInfo):
 		descendantOffset=ctypes.c_int()
 		what = self.FINDCONTENTDESCENDANT_POSITIONS.get(position, position)
 		NVDAHelper.localLib.nvdaInProcUtils_IA2Text_findContentDescendant(obj.appModule.helperLocalBindingHandle,obj.windowHandle,obj.IAccessibleObject.uniqueID,what,ctypes.byref(descendantID),ctypes.byref(descendantOffset))
-		#if descendantID.value == 0:
+		if descendantID.value == 0:
 			# No descendant.
-			#raise LookupError("Object has no text descendants")
+			raise LookupError("Object has no text descendants")
 		if position == self.POSITION_SELECTION_END:
 			# As we descend, we need the last offset (not the exclusive end offset),
 			# but we want the exclusive end as the final result.
