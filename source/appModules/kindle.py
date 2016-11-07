@@ -78,20 +78,23 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		return False
 
 	def script_finalizeSelection(self, gesture):
-		fakeSel = self.makeTextInfo(textInfos.POSITION_SELECTION)
+		fakeSel = self.selection
 		if fakeSel.isCollapsed:
 			# Translators: Reported when there is no text selection.
 			ui.message(_("No selection"))
 			return
 		# Update the selection in Kindle.
 		fakeSel.innerTextInfo.updateSelection()
-		# The selection might have been adjusted to meet word boundaries, so update our fake selection.
+		# The selection might have been adjusted to meet word boundaries,
+		# so retrieve and report the selection from Kindle.
 		# we can't just use self.makeTextInfo, as that will use our fake selection.
 		realSel = self.rootNVDAObject.makeTextInfo(textInfos.POSITION_SELECTION)
-		fakeSel.innerTextInfo = realSel
-		self.selection = fakeSel
 		# Translators: Announces selected text. %s is replaced with the text.
-		speech.speakSelectionMessage(_("selected %s"), fakeSel.text)
+		speech.speakSelectionMessage(_("selected %s"), realSel.text)
+		# Remove our virtual selection and move the caret to the active end.
+		fakeSel.innerTextInfo = realSel
+		fakeSel.collapse(end=not self._lastSelectionMovedStart)
+		self.selection = fakeSel
 	# Translators: Describes a command.
 	script_finalizeSelection.__doc__ = _("Finalizes selection of text and presents a menu from which you can choose what to do with the selection")
 	script_finalizeSelection.category = SCRCAT_SYSTEMCARET
