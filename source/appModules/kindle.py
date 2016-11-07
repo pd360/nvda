@@ -19,6 +19,8 @@ from textInfos import DocumentWithPageTurns
 from NVDAObjects.IAccessible import IAccessible
 from globalCommands import SCRCAT_SYSTEMCARET
 from NVDAObjects.IAccessible.ia2TextMozilla import MozillaCompoundTextInfo
+import IAccessibleHandler
+import aria
 
 class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,BrowseModeDocumentTreeInterceptor):
 
@@ -185,3 +187,12 @@ class AppModule(appModuleHandler.AppModule):
 			if hasattr(obj,'IAccessibleTextObject') and obj.name=="Book Page View":
 				clsList.insert(0,BookPageView)
 		return clsList
+
+	def event_NVDAObject_init(self, obj):
+		if isinstance(obj, IAccessible) and isinstance(obj.IAccessibleObject, IAccessibleHandler.IAccessible2) and obj.role == controlTypes.ROLE_LINK:
+			ariaRoles = obj.IA2Attributes.get("xml-roles", "").split(" ")
+			for ar in ariaRoles:
+				role = aria.ariaRolesToNVDARoles.get(ar)
+				if role:
+					obj.role = role
+					return
