@@ -437,6 +437,13 @@ class TextInfo(baseObject.AutoPropertyObject):
 		import braille
 		return braille.getControlFieldBraille(self, field, ancestors, reportStart, formatConfig)
 
+	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, unit=None, extraDetail=False , separator=speech.CHUNK_SEPARATOR):
+		"""Get the spoken representation for given format information.
+		The base implementation just calls L{speech.getFormatFieldSpeech}.
+		This can be extended in order to support implementation specific attributes.
+		"""
+		return speech.getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
+
 	def activate(self):
 		"""Activate this position.
 		For example, this might activate the object at this position or click the point at this position.
