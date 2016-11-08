@@ -441,6 +441,7 @@ class TextInfo(baseObject.AutoPropertyObject):
 		"""Get the spoken representation for given format information.
 		The base implementation just calls L{speech.getFormatFieldSpeech}.
 		This can be extended in order to support implementation specific attributes.
+		If extended, the superclass should be called first.
 		"""
 		return speech.getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
 
