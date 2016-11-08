@@ -165,6 +165,15 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 					item.field['page-number'] = self.obj.pageNumber
 		return items
 
+	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, unit=None, extraDetail=False , separator=speech.CHUNK_SEPARATOR):
+		out = ""
+		mark = attrs.get("mark")
+		oldMark = attrsCache.get("mark") if attrsCache is not None else None
+		if oldMark != mark:
+			out += (mark if mark else "no mark") + separator
+		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
+		return out
+
 class BookPageView(DocumentWithPageTurns,IAccessible):
 	"""Allows navigating page text content with the arrow keys."""
 
