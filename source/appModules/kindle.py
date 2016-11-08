@@ -21,6 +21,8 @@ from globalCommands import SCRCAT_SYSTEMCARET
 from NVDAObjects.IAccessible.ia2TextMozilla import MozillaCompoundTextInfo
 import IAccessibleHandler
 import aria
+import winUser
+from logHandler import log
 
 class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,BrowseModeDocumentTreeInterceptor):
 
@@ -106,6 +108,40 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		"kb:applications": "finalizeSelection",
 		"kb:shift+f10": "finalizeSelection",
 	}
+
+	def _maybeActivateWithClick(self, info):
+		obj = info.NVDAObjectAtStart
+		if not obj:
+			return False
+		try:
+			action = obj.getActionName()
+		except NotImplementedError:
+			# No action, so we should click.
+			pass
+		else:
+			if action != "next page":
+				# There's an activation action, so we should use it.
+				log.debug("Using action %s" % action)
+				return False
+		# Click the character.
+		try:
+			x, y = info.pointAtStart
+		except NotImplementedError:
+			log.debugWarning("Couldn't get point to click")
+			return False
+		# This is how we activate annotations,
+		# since they aren't objects and thus can't have actions.
+		log.debug("Clicking")
+		winUser.setCursorPos(x, y)
+		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
+		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
+		return True
+
+	def _activatePosition(self, info=None):
+		if not info:
+			info = self.selection
+		if not self._maybeActivateWithClick(info):
+			return super(BookPageViewTreeInterceptor, self)._activatePosition(info=info)
 
 class BookPageViewTextInfo(MozillaCompoundTextInfo):
 
