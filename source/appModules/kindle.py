@@ -123,16 +123,18 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 				# There's an activation action, so we should use it.
 				log.debug("Using action %s" % action)
 				return False
-		# Click the character.
+		# Double click the character.
+		# This is how we activate annotations,
+		# since they aren't objects and thus can't have actions.
 		try:
-			x, y = info.pointAtStart
+			p = info.pointAtStart
 		except NotImplementedError:
 			log.debugWarning("Couldn't get point to click")
 			return False
-		# This is how we activate annotations,
-		# since they aren't objects and thus can't have actions.
-		log.debug("Clicking")
-		winUser.setCursorPos(x, y)
+		log.debug("Double clicking")
+		winUser.setCursorPos(p.x, p.y)
+		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
+		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
 		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
 		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
 		return True

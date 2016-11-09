@@ -221,3 +221,6 @@ class RootProxyTextInfo(textInfos.TextInfo):
 
 	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, unit=None, extraDetail=False , separator=speech.CHUNK_SEPARATOR):
 		return self.innerTextInfo.getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
+
+	def _get_pointAtStart(self):
+		return self.innerTextInfo.pointAtStart
