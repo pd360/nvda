@@ -169,10 +169,14 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 
 	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, unit=None, extraDetail=False , separator=speech.CHUNK_SEPARATOR):
 		out = ""
-		mark = attrs.get("mark")
-		oldMark = attrsCache.get("mark") if attrsCache is not None else None
-		if oldMark != mark:
-			out += (mark if mark else "no mark") + separator
+		highlight = attrs.get("highlight")
+		oldHighlight = attrsCache.get("highlight") if attrsCache is not None else None
+		if oldHighlight != highlight:
+			out += ("highlight" if highlight else "no highlight") + separator
+		popular = attrs.get("kindle-popular-highlight-count")
+		oldPopular = attrsCache.get("kindle-popular-highlight-count") if attrsCache is not None else None
+		if oldPopular != popular:
+			out += ("%s highlighted" % popular if mark else "out of popular highlight") + separator
 		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
 		return out
 
