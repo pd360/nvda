@@ -23,6 +23,7 @@ import IAccessibleHandler
 import aria
 import winUser
 from logHandler import log
+import ui
 
 class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,BrowseModeDocumentTreeInterceptor):
 
