@@ -13,6 +13,7 @@ from scriptHandler import willSayAllResume, isScriptWaiting
 import controlTypes
 import treeInterceptorHandler
 from cursorManager import ReviewCursorManager
+import browseMode
 from browseMode import BrowseModeDocumentTreeInterceptor
 import textInfos
 from textInfos import DocumentWithPageTurns
@@ -145,6 +146,62 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 			info = self.selection
 		if not self._maybeActivateWithClick(info):
 			return super(BookPageViewTreeInterceptor, self)._activatePosition(info=info)
+
+	def _iterDescendantObjs(self, hypertext, startIndex, direction):
+		"""Iterate through all embedded objects in a given direction starting at a given hyperlink index.
+		"""
+		log.debug("Starting at hyperlink index %d" % startIndex)
+		for index in xrange(startIndex, hypertext.nHyperlinks if direction == "next" else -1, 1 if direction == "next" else -1):
+			hl = hypertext.hyperlink(index)
+			obj = IAccessible(IAccessibleObject=hl.QueryInterface(IAccessibleHandler.IAccessible2), IAccessibleChildID=0)
+			yield obj
+			#for subObj in self._iterDescendantObjs(obj.iaHypertext, 0 if direction == "next" else obj.iaHypertext.nHyperlinks - 1, direction):
+				#yield subObj
+
+	NODE_TYPES_TO_ROLES = {
+		"link": controlTypes.ROLE_LINK,
+		"graphic": controlTypes.ROLE_GRAPHIC,
+	}
+
+	def _iterNodesByType(self, nodeType, direction="next", pos=None):
+		role = self.NODE_TYPES_TO_ROLES.get(nodeType)
+		if not role:
+			raise NotImplementedError
+		if not pos:
+			pos = self.makeTextInfo(textInfos.POSITION_FIRST if direction == "next" else textInfos.POSITION_LAST)
+		obj = pos.innerTextInfo._startObj
+		# Find the first embedded object in the requested direction.
+		# Use the text, as enumerating IAccessibleHypertext means more cross-process calls.
+		offset = pos.innerTextInfo._start._startOffset
+		if direction == "next":
+			text = obj.IAccessibleTextObject.text(offset + 1, obj.IAccessibleTextObject.nCharacters)
+			embed = text.find(u"\uFFFC")
+			if embed != -1:
+				embed += offset + 1
+		else:
+			text = obj.IAccessibleTextObject.text(0, offset)
+			embed = text.rfind(u"\uFFFC")
+		log.debug("%s embedded object from offset %d: %d" % (direction, offset, embed))
+		hli = -1 if embed == -1 else obj.iaHypertext.hyperlinkIndex(embed)
+		while True:
+			if hli != -1:
+				for embObj in self._iterDescendantObjs(obj.iaHypertext, hli, direction):
+					if embObj.role == role:
+						ti = self.makeTextInfo(embObj)
+						yield browseMode.TextInfoQuickNavItem(nodeType, self, ti)
+			# No more embedded objects here.
+			# We started in an embedded object, so continue in the parent.
+			if obj == self.rootNVDAObject:
+				log.debug("At root, stopping")
+				break # Can't go any further.
+			log.debug("Continuing in parent")
+			# Get the index of the embedded object we just came from.
+			hl = obj.IAccessibleObject.QueryInterface(IAccessibleHandler.IAccessibleHyperlink)
+			offset = hl.startIndex
+			obj = obj.parent
+			hli = obj.iaHypertext.hyperlinkIndex(offset)
+			# Continue the walk from the next embedded object.
+			hli += 1 if direction == "next" else -1
 
 class BookPageViewTextInfo(MozillaCompoundTextInfo):
 
