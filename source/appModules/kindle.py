@@ -147,15 +147,15 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		if not self._maybeActivateWithClick(info):
 			return super(BookPageViewTreeInterceptor, self)._activatePosition(info=info)
 
-	def _iterDescendantObjs(self, hypertext, startIndex, direction):
-		"""Iterate through all embedded objects in a given direction starting at a given hyperlink index.
+	def _iterEmbeddedObjs(self, hypertext, startIndex, direction):
+		"""Recursively iterate through all embedded objects in a given direction starting at a given hyperlink index.
 		"""
 		log.debug("Starting at hyperlink index %d" % startIndex)
 		for index in xrange(startIndex, hypertext.nHyperlinks if direction == "next" else -1, 1 if direction == "next" else -1):
 			hl = hypertext.hyperlink(index)
 			obj = IAccessible(IAccessibleObject=hl.QueryInterface(IAccessibleHandler.IAccessible2), IAccessibleChildID=0)
 			yield obj
-			#for subObj in self._iterDescendantObjs(obj.iaHypertext, 0 if direction == "next" else obj.iaHypertext.nHyperlinks - 1, direction):
+			#for subObj in self._iterEmbeddedObjs(obj.iaHypertext, 0 if direction == "next" else obj.iaHypertext.nHyperlinks - 1, direction):
 				#yield subObj
 
 	NODE_TYPES_TO_ROLES = {
@@ -185,7 +185,7 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		hli = -1 if embed == -1 else obj.iaHypertext.hyperlinkIndex(embed)
 		while True:
 			if hli != -1:
-				for embObj in self._iterDescendantObjs(obj.iaHypertext, hli, direction):
+				for embObj in self._iterEmbeddedObjs(obj.iaHypertext, hli, direction):
 					if embObj.role == role:
 						ti = self.makeTextInfo(embObj)
 						yield browseMode.TextInfoQuickNavItem(nodeType, self, ti)
