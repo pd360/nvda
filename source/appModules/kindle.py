@@ -230,11 +230,19 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 		highlight = attrs.get("highlight")
 		oldHighlight = attrsCache.get("highlight") if attrsCache is not None else None
 		if oldHighlight != highlight:
-			out += ("highlight" if highlight else "no highlight") + separator
+			# Translators: Reported when text is highlighted.
+			out += (_("highlight") if highlight
+				# Translators: Reported when text is not highlighted.
+				else _("no highlight")) + separator
 		popular = attrs.get("kindle-popular-highlight-count")
 		oldPopular = attrsCache.get("kindle-popular-highlight-count") if attrsCache is not None else None
 		if oldPopular != popular:
-			out += ("%s highlighted" % popular if mark else "out of popular highlight") + separator
+			# Translators: Reported in Kindle when text has been identified as a popular highlight;
+			# i.e. it has been highlighted by several people.
+			# %s is replaced with the number of people who have highlighted this text.
+			out += (_("%s highlighted") % popular if popular
+				# Translators: Reported when moving out of a popular highlight.
+				else _("out of popular highlight")) + separator
 		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
 		return out
 
