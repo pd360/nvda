@@ -246,6 +246,25 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
 		return out
 
+	def updateSelection(self):
+		# For now, we need to do all selection on the root.
+		# This means only entire embedded objects can be selected.
+		if self._startObj == self.obj:
+			sel = self._start.copy()
+		else:
+			log.debug("Start object isn't root, getting embedding")
+			sel = self._getEmbedding(self._startObj)
+			assert sel.obj == self.obj
+		if self._endObj == self.obj:
+			end = self._end
+		else:
+			log.debug("End object isn't root, getting embedding")
+			end = self._getEmbedding(self._endObj)
+			assert end.obj == self.obj
+		sel.setEndPoint(end, "endToEnd")
+		log.debug("Setting selection to (%d, %d)" % (sel._startOffset, sel._endOffset))
+		sel.updateSelection()
+
 class BookPageView(DocumentWithPageTurns,IAccessible):
 	"""Allows navigating page text content with the arrow keys."""
 
