@@ -202,7 +202,7 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 					item.field['page-number'] = self.obj.pageNumber
 		return items
 
-	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, unit=None, extraDetail=False , separator=speech.CHUNK_SEPARATOR):
+	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, reason=None, unit=None, extraDetail=False , initialFormat=False, separator=speech.CHUNK_SEPARATOR):
 		out = ""
 		highlight = attrs.get("highlight")
 		oldHighlight = attrsCache.get("highlight") if attrsCache is not None else None
@@ -220,7 +220,7 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 			out += (_("%s highlighted") % popular if popular
 				# Translators: Reported when moving out of a popular highlight.
 				else _("out of popular highlight")) + separator
-		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, unit=unit, extraDetail=extraDetail , separator=separator)
+		out += super(BookPageViewTextInfo, self).getFormatFieldSpeech(attrs, attrsCache=attrsCache, formatConfig=formatConfig, reason=reason, unit=unit, extraDetail=extraDetail , initialFormat=initialFormat, separator=separator)
 		return out
 
 	def updateSelection(self):
