@@ -61,6 +61,8 @@ class MozillaCompoundTextInfo(CompoundTextInfo):
 			try:
 				self._start, self._startObj = self._findContentDescendant(position, textInfos.POSITION_FIRST)
 				self._end, self._endObj = self._findContentDescendant(position, textInfos.POSITION_LAST)
+				# This is the last character. Move to the end.
+				self._end.move(textInfos.UNIT_CHARACTER, 1)
 			except LookupError:
 				# This might be an embedded object that doesn't support text such as a graphic.
 				if position not in obj:
