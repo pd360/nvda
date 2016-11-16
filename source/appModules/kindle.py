@@ -83,13 +83,26 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 	def _tabOverride(self,direction):
 		return False
 
-	def script_finalizeSelection(self, gesture):
+	def script_showSelectionOptions(self, gesture):
 		fakeSel = self.selection
 		if fakeSel.isCollapsed:
-			# Translators: Reported when there is no text selection.
-			ui.message(_("No selection"))
+			# Double click to access the toolbar; e.g. for annotations.
+			try:
+				p = fakeSel.pointAtStart
+			except NotImplementedError:
+				log.debugWarning("Couldn't get point to click")
+				return
+			log.debug("Double clicking")
+			winUser.setCursorPos(p.x, p.y)
+			winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
+			winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
+			winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
+			winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
 			return
+
+		# The user makes a selection using browse mode virtual selection.
 		# Update the selection in Kindle.
+		# This will cause the options to appear.
 		fakeSel.innerTextInfo.updateSelection()
 		# The selection might have been adjusted to meet word boundaries,
 		# so retrieve and report the selection from Kindle.
@@ -102,50 +115,14 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		fakeSel.collapse(end=not self._lastSelectionMovedStart)
 		self.selection = fakeSel
 	# Translators: Describes a command.
-	script_finalizeSelection.__doc__ = _("Finalizes selection of text and presents a menu from which you can choose what to do with the selection")
-	script_finalizeSelection.category = SCRCAT_SYSTEMCARET
+	script_showSelectionOptions.__doc__ = _("Shows options related to selected text or text at the cursor")
+	script_showSelectionOptions.category = SCRCAT_SYSTEMCARET
 
 	__gestures = {
-		"kb:control+c": "finalizeSelection",
-		"kb:applications": "finalizeSelection",
-		"kb:shift+f10": "finalizeSelection",
+		"kb:control+c": "showSelectionOptions",
+		"kb:applications": "showSelectionOptions",
+		"kb:shift+f10": "showSelectionOptions",
 	}
-
-	def _maybeActivateWithClick(self, info):
-		obj = info.NVDAObjectAtStart
-		if not obj:
-			return False
-		try:
-			action = obj.getActionName()
-		except NotImplementedError:
-			# No action, so we should click.
-			pass
-		else:
-			if action != "next page":
-				# There's an activation action, so we should use it.
-				log.debug("Using action %s" % action)
-				return False
-		# Double click the character.
-		# This is how we activate annotations,
-		# since they aren't objects and thus can't have actions.
-		try:
-			p = info.pointAtStart
-		except NotImplementedError:
-			log.debugWarning("Couldn't get point to click")
-			return False
-		log.debug("Double clicking")
-		winUser.setCursorPos(p.x, p.y)
-		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
-		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
-		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTDOWN, 0, 0, None, None)
-		winUser.mouse_event(winUser.MOUSEEVENTF_LEFTUP, 0, 0, None, None)
-		return True
-
-	def _activatePosition(self, info=None):
-		if not info:
-			info = self.selection
-		if not self._maybeActivateWithClick(info):
-			return super(BookPageViewTreeInterceptor, self)._activatePosition(info=info)
 
 	def _iterEmbeddedObjs(self, hypertext, startIndex, direction):
 		"""Recursively iterate through all embedded objects in a given direction starting at a given hyperlink index.
