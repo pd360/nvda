@@ -4,6 +4,7 @@
 #See the file COPYING for more details.
 
 import time
+from comtypes.hresult import S_OK
 import appModuleHandler
 import speech
 import sayAllHandler
@@ -265,21 +266,9 @@ class BookPageView(DocumentWithPageTurns,IAccessible):
 			return first
 
 	def turnPage(self,previous=False):
-		try:
-			self.IAccessibleActionObject.doAction(1 if previous else 0)
-		except COMError:
+		if self.IAccessibleActionObject.doAction(1 if previous else 0) != S_OK:
 			raise RuntimeError("no more pages")
-		startTime=curTime=time.time()
-		while (curTime-startTime)<0.5:
-			api.processPendingEvents(processEventQueue=False)
-			# should  only check for pending pageChange for this object specifically, but object equality seems to fail sometimes?
-			if eventHandler.isPendingEvents("pageChange"):
-				self.invalidateCache()
-				break
-			time.sleep(0.05)
-			curTime=time.time()
-		else:
-			raise RuntimeError("no more pages")
+		self.invalidateCache()
 
 class PageTurnFocusIgnorer(IAccessible):
 
