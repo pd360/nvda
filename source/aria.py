@@ -56,8 +56,6 @@ ariaRolesToNVDARoles={
 	"tree":controlTypes.ROLE_TREEVIEW,
 	"treegrid":controlTypes.ROLE_TREEVIEW,
 	"treeitem":controlTypes.ROLE_TREEVIEWITEM,
-	# Digital Publishing Module
-	"doc-noteref":controlTypes.ROLE_NOTE,
 }
 
 ariaSortValuesToNVDAStates={

@@ -22,7 +22,6 @@ from NVDAObjects.IAccessible import IAccessible
 from globalCommands import SCRCAT_SYSTEMCARET
 from NVDAObjects.IAccessible.ia2TextMozilla import MozillaCompoundTextInfo
 import IAccessibleHandler
-import aria
 import winUser
 from logHandler import log
 import ui
@@ -144,13 +143,13 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 				yield subObj
 
 	NODE_TYPES_TO_ROLES = {
-		"link": controlTypes.ROLE_LINK,
-		"graphic": controlTypes.ROLE_GRAPHIC,
+		"link": {controlTypes.ROLE_LINK, controlTypes.ROLE_FOOTNOTE},
+		"graphic": {controlTypes.ROLE_GRAPHIC},
 	}
 
 	def _iterNodesByType(self, nodeType, direction="next", pos=None):
-		role = self.NODE_TYPES_TO_ROLES.get(nodeType)
-		if not role:
+		roles = self.NODE_TYPES_TO_ROLES.get(nodeType)
+		if not roles:
 			raise NotImplementedError
 		if not pos:
 			pos = self.makeTextInfo(textInfos.POSITION_FIRST if direction == "next" else textInfos.POSITION_LAST)
@@ -175,7 +174,7 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		while True:
 			if hli != -1:
 				for embObj in self._iterEmbeddedObjs(obj.iaHypertext, hli, direction):
-					if embObj.role == role:
+					if embObj.role in roles:
 						ti = self.makeTextInfo(embObj)
 						yield browseMode.TextInfoQuickNavItem(nodeType, self, ti)
 			# No more embedded objects here.
@@ -216,8 +215,12 @@ class BookPageViewTextInfo(MozillaCompoundTextInfo):
 
 	def getFormatFieldSpeech(self, attrs, attrsCache=None, formatConfig=None, reason=None, unit=None, extraDetail=False , initialFormat=False, separator=speech.CHUNK_SEPARATOR):
 		out = ""
-		highlight = attrs.get("highlight")
-		oldHighlight = attrsCache.get("highlight") if attrsCache is not None else None
+		comment = attrs.get("kindle-user-note")
+		if comment:
+			# For now, we report this the same way we do comments.
+			attrs["comment"] = comment
+		highlight = attrs.get("kindle-highlight")
+		oldHighlight = attrsCache.get("kindle-highlight") if attrsCache is not None else None
 		if oldHighlight != highlight:
 			# Translators: Reported when text is highlighted.
 			out += (_("highlight") if highlight
@@ -302,9 +305,6 @@ class AppModule(appModuleHandler.AppModule):
 
 	def event_NVDAObject_init(self, obj):
 		if isinstance(obj, IAccessible) and isinstance(obj.IAccessibleObject, IAccessibleHandler.IAccessible2) and obj.role == controlTypes.ROLE_LINK:
-			ariaRoles = obj.IA2Attributes.get("xml-roles", "").split(" ")
-			for ar in ariaRoles:
-				role = aria.ariaRolesToNVDARoles.get(ar)
-				if role:
-					obj.role = role
-					return
+			xRoles = obj.IA2Attributes.get("xml-roles", "").split(" ")
+			if "kindle-footnoteref" in xRoles:
+				obj.role = controlTypes.ROLE_FOOTNOTE

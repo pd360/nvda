@@ -79,7 +79,7 @@ class ControlField(Field):
 			or (role == controlTypes.ROLE_LIST and controlTypes.STATE_READONLY not in states)
 		):
 			return self.PRESCAT_SINGLELINE
-		elif role in (controlTypes.ROLE_SEPARATOR, controlTypes.ROLE_FOOTNOTE, controlTypes.ROLE_ENDNOTE, controlTypes.ROLE_EMBEDDEDOBJECT, controlTypes.ROLE_APPLICATION, controlTypes.ROLE_DIALOG, controlTypes.ROLE_MATH, controlTypes.ROLE_NOTE):
+		elif role in (controlTypes.ROLE_SEPARATOR, controlTypes.ROLE_FOOTNOTE, controlTypes.ROLE_ENDNOTE, controlTypes.ROLE_EMBEDDEDOBJECT, controlTypes.ROLE_APPLICATION, controlTypes.ROLE_DIALOG, controlTypes.ROLE_MATH):
 			return self.PRESCAT_MARKER
 		elif role in (controlTypes.ROLE_TABLECELL, controlTypes.ROLE_TABLECOLUMNHEADER, controlTypes.ROLE_TABLEROWHEADER):
 			return self.PRESCAT_CELL
