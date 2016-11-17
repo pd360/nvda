@@ -248,7 +248,6 @@ class BookPageView(DocumentWithPageTurns,IAccessible):
 
 	treeInterceptorClass=BookPageViewTreeInterceptor
 	TextInfo=BookPageViewTextInfo
-	shouldAllowIAccessibleFocusEvent=True
 
 	def _get_pageNumber(self):
 		try:
