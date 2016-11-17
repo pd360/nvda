@@ -157,8 +157,12 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 			if embed != -1:
 				embed += offset + 1
 		else:
-			text = obj.IAccessibleTextObject.text(0, offset)
-			embed = text.rfind(u"\uFFFC")
+			if offset > 0:
+				text = obj.IAccessibleTextObject.text(0, offset)
+				embed = text.rfind(u"\uFFFC")
+			else:
+				# We're at the start; we can't go back any further.
+				embed = -1
 		log.debug("%s embedded object from offset %d: %d" % (direction, offset, embed))
 		hli = -1 if embed == -1 else obj.iaHypertext.hyperlinkIndex(embed)
 		while True:
