@@ -132,9 +132,16 @@ class BookPageViewTreeInterceptor(DocumentWithPageTurns,ReviewCursorManager,Brow
 		for index in xrange(startIndex, hypertext.nHyperlinks if direction == "next" else -1, 1 if direction == "next" else -1):
 			hl = hypertext.hyperlink(index)
 			obj = IAccessible(IAccessibleObject=hl.QueryInterface(IAccessibleHandler.IAccessible2), IAccessibleChildID=0)
+			log.debug("Yielding object at index %d" % index)
 			yield obj
-			#for subObj in self._iterEmbeddedObjs(obj.iaHypertext, 0 if direction == "next" else obj.iaHypertext.nHyperlinks - 1, direction):
-				#yield subObj
+			try:
+				objHt = obj.iaHypertext
+			except:
+				# This is a graphic, etc. which doesn't support text.
+				continue
+			log.debug("Object has hypertext. Recursing")
+			for subObj in self._iterEmbeddedObjs(objHt, 0 if direction == "next" else objHt.nHyperlinks - 1, direction):
+				yield subObj
 
 	NODE_TYPES_TO_ROLES = {
 		"link": controlTypes.ROLE_LINK,
