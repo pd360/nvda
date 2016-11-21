@@ -67,11 +67,11 @@ class SynthDriver(SynthDriver):
 	def load_dll(self):
 		global dll
 		dll = ctypes.windll[dll_file]
-		dll.get_current_voice_language.restype = ctypes.c_wchar_p
-		dll.initialize()
-		dll.set_callback(callback)
-		dll.get_voices.restype = ctypes.c_wchar_p
-		voices = dll.get_voices().split('|')
+		dll.ocSpeech_getCurrentVoiceLanguage.restype = ctypes.c_wchar_p
+		dll.ocSpeech_initialize()
+		dll.ocSpeech_setCallback(callback)
+		dll.ocSpeech_getVoices.restype = ctypes.c_wchar_p
+		voices = dll.ocSpeech_getVoices().split('|')
 		for i, v in enumerate(voices):
 			print i, v
 		self.event.set()
@@ -81,7 +81,7 @@ class SynthDriver(SynthDriver):
 
 	def _set_rate(self,vl):
 		self._rate = self._percentToParam(vl,minRate,maxRate)
-		_bgExec(dll.set_property, u"MSTTS.SpeakRate", self._rate)
+		_bgExec(dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
 		global speaking, additional_text, marks
@@ -105,7 +105,7 @@ class SynthDriver(SynthDriver):
 
 	def _speak(self, text):
 		global speaking
-		lang = dll.get_current_voice_language()
+		lang = dll.ocSpeech_getCurrentVoiceLanguage()
 		xml=u"""<speak version="1.0"
 xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
 %s
@@ -117,7 +117,7 @@ xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
 				return
 			speaking = True
 
-			dll.speak(text)
+			dll.ocSpeech_speak(text)
 
 	def _get_lastIndex(self):
 		return lastindex
@@ -157,7 +157,7 @@ def done():
 				return
 			if speaking and additional_text:
 				t = additional_text.pop(0)
-				_bgExec(dll.speak, t)
+				_bgExec(dll.ocSpeech_speak, t)
 
 def clear_queue(queue):
 	try:
