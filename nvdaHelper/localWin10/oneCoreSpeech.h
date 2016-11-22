@@ -16,10 +16,10 @@ http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 #pragma once
 #define export __declspec(dllexport) 
 
-typedef int (*ocSpeech_callbackType)(byte* data, int length, const char16* markers);
+typedef int (*ocSpeech_Callback)(byte* data, int length, const char16* markers);
 extern "C" {
 void export __stdcall ocSpeech_initialize();
-void export __stdcall ocSpeech_setCallback(ocSpeech_callbackType fn);
+void export __stdcall ocSpeech_setCallback(ocSpeech_Callback fn);
 export int __stdcall ocSpeech_speak(char16 *s);
 export const wchar_t * __stdcall ocSpeech_getVoices(void);
 export void __stdcall ocSpeech_setVoice(int i);

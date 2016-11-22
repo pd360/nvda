@@ -38,7 +38,7 @@ ISpeechSynthesisUndocumented: IInspectable {
 
 //Globals
 SpeechSynthesizer ^synth;
-ocSpeech_callbackType callback;
+ocSpeech_Callback callback;
 
 byte* getBytes(IBuffer^ buffer) {
 	// We want direct access to the buffer rather than copying it.
@@ -56,7 +56,7 @@ void __stdcall ocSpeech_initialize() {
 	synth = ref new SpeechSynthesizer();
 }
 
-void __stdcall ocSpeech_setCallback(ocSpeech_callbackType fn) {
+void __stdcall ocSpeech_setCallback(ocSpeech_Callback fn) {
 	callback = fn;
 }
 
