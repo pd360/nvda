@@ -13,12 +13,14 @@ import config
 import nvwave
 import speech
 
-additional_text = []
 MIN_RATE = -100
 MAX_RATE = 100
+
 dll = None
 lock = threading.RLock()
-speaking = False
+queuedSpeech = []
+wasCancelled = False
+isProcessing = False
 lastindex = None
 
 bgQueue = Queue.Queue()
@@ -29,12 +31,13 @@ class BgThread(threading.Thread):
 		self.setDaemon(True)
 
 	def run(self):
-		global isSpeaking
 		while True:
+			log.debug("queue get")
 			func, args, kwargs = bgQueue.get()
 			if not func:
 				break
 			try:
+				log.debug("run func")
 				func(*args, **kwargs)
 			except:
 				log.error("Error running function from queue", exc_info=True)
@@ -61,7 +64,7 @@ class SynthDriver(SynthDriver):
 		self.event = threading.Event()
 		self.bgt = BgThread()
 		self.bgt.start()
-		_bgExec(self.load_dll)
+		self.load_dll()
 		if not self.event.wait(4):
 			raise RuntimeError("Dll load failed or took too long")
 		global player
@@ -88,49 +91,49 @@ class SynthDriver(SynthDriver):
 		_bgExec(dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
-		global speaking, additional_text
+		global wasCancelled, queuedSpeech
 		with lock:
-			log.info("Setting speaking to False")
-			speaking = False
-		clear_queue(bgQueue)
-		additional_text = []
+			wasCancelled = True
+			log.debug("Cancelling")
+			queuedSpeech = []
 		player.stop()
 
 	def speak(self, seq):
 		new = []
-		lastmark = None
 		for item in seq:
 			if isinstance(item, basestring):
 				new.append(item.replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;'))
 			elif isinstance(item, speech.IndexCommand):
 				new.append('<mark name="%s"/>' % item.index)
 		text = u" ".join(new)
-		_bgExec(self._speak, text)
-
-	def _speak(self, text):
-		global speaking
 		lang = dll.ocSpeech_getCurrentVoiceLanguage()
 		xml=u"""<speak version="1.0"
 xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
 %s
 </speak>"""
 		text = xml % (lang, text)
+		global isProcessing, wasCancelled
 		with lock:
-			if speaking:
-				additional_text.append(text)
+			if isProcessing:
+				# We're already processing some speech, so queue this text.
+				# It'll be processed once the previous text is done.
+				log.debug("Already processing, queuing")
+				queuedSpeech.append(text)
 				return
-			log.info("Setting speaking to True")
-			speaking = True
-
-			dll.ocSpeech_speak(text)
+			wasCancelled = False
+			log.debug("Begin processing speech")
+			isProcessing = True
+		_bgExec(dll.ocSpeech_speak, text)
 
 	def _get_lastIndex(self):
 		return lastindex
 
 @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 def callback(bytes, len, markers):
-		global speaking
-		log.info("speaking: %r" % speaking)
+		global wasCancelled, isProcessing
+		if len > 44:
+			bytes += 44
+			len -= 44
 		data = ctypes.string_at(bytes, len)
 		if markers:
 			markers = markers.split('|')
@@ -139,17 +142,20 @@ def callback(bytes, len, markers):
 		last = 0
 
 		for marker in markers:
-			if not speaking:
-				return 0
+			if wasCancelled:
+				break
 			name, t = marker.split(':')
 			t = int(t)
 			t = int((22050.0/10000000)*t)
-			_bgExec(player.feed, data[44+(last*2):44+(t*2)])
+			_bgExec(player.feed, data[last*2:t*2])
 			_bgExec(set_last, int(name))
 			last = t
-		if not speaking:
-			return 0
-		_bgExec(player.feed, data[44+last*2:])
+		if wasCancelled:
+			log.debug("Cancelled, stopped feeding")
+		else:
+			_bgExec(player.feed, data[last*2:])
+			log.debug("Done feeding")
+		log.debug("Calling done")
 		_bgExec(done)
 		return 0
 
@@ -158,20 +164,14 @@ def set_last(x):
 	lastindex = x
 
 def done():
-		global speaking, additional_text
+		global isProcessing, wasCancelled
+		log.debug("Done called")
 		with lock:
-			if speaking and not additional_text:
-				log.info("Speaking to False")
-				speaking = False
-				return
-			if speaking and additional_text:
-				t = additional_text.pop(0)
-				log.info("Pushing more")
-				_bgExec(dll.ocSpeech_speak, t)
-
-def clear_queue(queue):
-	try:
-		while True:
-			queue.get_nowait()
-	except:
-		pass
+			if queuedSpeech:
+				text = queuedSpeech.pop(0)
+				log.debug("Queued speech present, begin processing next")
+				wasCancelled = False
+				dll.ocSpeech_speak(text)
+			else:
+				log.debug("Done processing")
+				isProcessing = False
