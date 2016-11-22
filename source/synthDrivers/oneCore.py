@@ -3,11 +3,8 @@
 #This file is covered by the GNU General Public License.
 #See the file COPYING for more details.
 
-import os
-from synthDriverHandler import SynthDriver
 import ctypes
-import Queue
-import threading
+from synthDriverHandler import SynthDriver
 from logHandler import log
 import config
 import nvwave
@@ -45,7 +42,6 @@ class SynthDriver(SynthDriver):
 		#voices = self._dll.ocSpeech_getVoices().split('|')
 		self._player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
 		# Initialize state.
-		self._lock = threading.RLock()
 		self._queuedSpeech = []
 		self._wasCancelled = False
 		self._isProcessing = False
@@ -66,12 +62,11 @@ class SynthDriver(SynthDriver):
 		self._dll.ocSpeech_setProperty(u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
-		with self._lock:
-			# Set a flag to tell the callback not to feed more audio.
-			self._wasCancelled = True
-			log.debug("Cancelling")
-			# There might be more text pending. Throw it away.
-			self._queuedSpeech = []
+		# Set a flag to tell the callback not to feed more audio.
+		self._wasCancelled = True
+		log.debug("Cancelling")
+		# There might be more text pending. Throw it away.
+		self._queuedSpeech = []
 		self._player.stop()
 
 	def speak(self, seq):
@@ -85,16 +80,15 @@ class SynthDriver(SynthDriver):
 		# OneCore speech barfs if you don't provide the language.
 		lang = self._dll.ocSpeech_getCurrentVoiceLanguage()
 		text = SSML_TEMPLATE.format(lang=lang, text=text)
-		with self._lock:
-			if self._isProcessing:
-				# We're already processing some speech, so queue this text.
-				# It'll be processed once the previous text is done.
-				log.debug("Already processing, queuing")
-				self._queuedSpeech.append(text)
-				return
-			self._wasCancelled = False
-			log.debug("Begin processing speech")
-			self._isProcessing = True
+		if self._isProcessing:
+			# We're already processing some speech, so queue this text.
+			# It'll be processed once the previous text is done.
+			log.debug("Already processing, queuing")
+			self._queuedSpeech.append(text)
+			return
+		self._wasCancelled = False
+		log.debug("Begin processing speech")
+		self._isProcessing = True
 		# ocSpeech_speak is async.
 		# It will call _callback in a background thread once done.
 		self._dll.ocSpeech_speak(text)
@@ -139,13 +133,12 @@ class SynthDriver(SynthDriver):
 		return 0
 
 	def _processNext(self):
-		with self._lock:
-			if self._queuedSpeech:
-				text = self._queuedSpeech.pop(0)
-				log.debug("Queued speech present, begin processing next")
-				self._wasCancelled = False
-				# ocSpeech_speak is async.
-				self._dll.ocSpeech_speak(text)
-			else:
-				log.debug("Done processing")
-				self._isProcessing = False
+		if self._queuedSpeech:
+			text = self._queuedSpeech.pop(0)
+			log.debug("Queued speech present, begin processing next")
+			self._wasCancelled = False
+			# ocSpeech_speak is async.
+			self._dll.ocSpeech_speak(text)
+		else:
+			log.debug("Done processing")
+			self._isProcessing = False
