@@ -1,14 +1,26 @@
-#include <iostream>
+/*
+C++ code to provide access to Windows OneCore voices.
+This file is a part of the NVDA project.
+URL: http://www.nvaccess.org/
+Copyright 2016 Tyler Spivey, NV Access Limited.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License version 2.0, as published by
+    the Free Software Foundation.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+This license can be found at:
+http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+*/
+
 #include <string>
 #include <collection.h>
-#include <list>
-#include <stdio.h>
 #include <ppltasks.h>
-#include <windows.h>
 #include <wrl.h>
 #include <robuffer.h>
 #include "oneCoreSpeech.h"
 
+using namespace std;
 using namespace Platform;
 using namespace Windows::Media::SpeechSynthesis;
 using namespace concurrency;
@@ -28,17 +40,16 @@ ISpeechSynthesisUndocumented: IInspectable {
 SpeechSynthesizer ^synth;
 ocSpeech_callbackType callback;
 
-byte* getBytes(IBuffer^ buffer)
-{
-// We want direct access to the buffer rather than copying it.
-// To do this, we need to get to the IBufferByteAccess interface.
-// See http://cm-bloggers.blogspot.com/2012/09/accessing-image-pixel-data-in-ccx.html
-ComPtr<IInspectable> insp = reinterpret_cast<IInspectable*>(buffer);
-ComPtr<IBufferByteAccess> bufferByteAccess;
-insp.As(&bufferByteAccess);
-byte* bytes = nullptr;
-bufferByteAccess->Buffer(&bytes);
-return bytes;
+byte* getBytes(IBuffer^ buffer) {
+	// We want direct access to the buffer rather than copying it.
+	// To do this, we need to get to the IBufferByteAccess interface.
+	// See http://cm-bloggers.blogspot.com/2012/09/accessing-image-pixel-data-in-ccx.html
+	ComPtr<IInspectable> insp = reinterpret_cast<IInspectable*>(buffer);
+	ComPtr<IBufferByteAccess> bufferByteAccess;
+	insp.As(&bufferByteAccess);
+	byte* bytes = nullptr;
+	bufferByteAccess->Buffer(&bytes);
+	return bytes;
 }
 
 void __stdcall ocSpeech_initialize() {
@@ -51,15 +62,14 @@ void __stdcall ocSpeech_setCallback(ocSpeech_callbackType fn) {
 
 int __stdcall ocSpeech_speak(char16 *s) {
 	String ^text = ref new String(s);
-	std::wstring* markersStr;
+	auto markersStr = make_shared<wstring>();
 	task<SpeechSynthesisStream ^>  speakTask;
 	try {
 		speakTask = create_task(synth->SynthesizeSsmlToStreamAsync(text));
-		markersStr = new std::wstring;
 	} catch (Platform::Exception ^e) {
 		return -1;
 	}
-	speakTask.then([markersStr](SpeechSynthesisStream^ speechStream) {
+	speakTask.then([markersStr] (SpeechSynthesisStream^ speechStream) {
 		Buffer^ buffer = ref new Buffer(speechStream->Size);
 		IVectorView<IMediaMarker^>^ markers = speechStream->Markers;
 		for (auto&& marker : markers) {
@@ -67,32 +77,31 @@ int __stdcall ocSpeech_speak(char16 *s) {
 				*markersStr += L"|";
 			*markersStr += marker->Text->Data();
 			*markersStr += L":";
-			*markersStr += std::to_wstring(marker->Time.Duration);
+			*markersStr += to_wstring(marker->Time.Duration);
 		}
 		auto t = create_task(speechStream->ReadAsync(buffer, speechStream->Size, Windows::Storage::Streams::InputStreamOptions::None));
 		return t;
-	}).then([markersStr](IBuffer^ buffer) {
+	}).then([markersStr] (IBuffer^ buffer) {
 		// Data has been read from the speech stream.
 		// Pass it to the callback.
 		byte *bytes = getBytes(buffer);
 		callback(bytes, buffer->Length, markersStr->c_str());
-	}).then([markersStr](task<void> previous) {
-		// All done. Clean up.
+	}).then([] (task<void> previous) {
+		// Catch any unhandled exceptions that occurred during these tasks.
 		try {
 			previous.get();
 		} catch (Platform::Exception^ e) {
 		}
-		delete markersStr;
 	});
 
 	return 0;
 }
 
 const wchar_t * __stdcall ocSpeech_getVoices() {
-	std::wstring voices;
+	wstring voices;
 	for (int i = 0; i < synth->AllVoices->Size; ++i) {
 		VoiceInformation^ info = synth->AllVoices->GetAt(i);
-		voices += info->DisplayName->Data();
+		voices += info->Id->Data();
 		if (i != synth->AllVoices->Size - 1)
 			voices += L"|";
 	}
@@ -114,8 +123,6 @@ void __stdcall ocSpeech_setProperty(char16 *name, long val) {
 	if (FAILED(WindowsCreateString(name, lstrlenW(name), &h))) {
 		return;
 	}
-	//wprintf(L"%s\n", WindowsGetStringRawBuffer(h, nullptr));
-	//Beep(2000, 50);
 	undoc->SetVoicePropertyNum(h, val);
 	WindowsDeleteString(h);
 }

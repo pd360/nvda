@@ -1,3 +1,8 @@
+#A part of NonVisual Desktop Access (NVDA)
+#Copyright (C) 2016 Tyler Spivey, NV Access Limited
+#This file is covered by the GNU General Public License.
+#See the file COPYING for more details.
+
 import os
 from synthDriverHandler import SynthDriver
 import ctypes
@@ -9,16 +14,14 @@ import nvwave
 import speech
 
 additional_text = []
-minRate = -100
-maxRate = 100
+MIN_RATE = -100
+MAX_RATE = 100
 dll = None
 lock = threading.RLock()
 speaking = False
 lastindex = None
 
-
 bgQueue = Queue.Queue()
-text_to_speak = []
 
 class BgThread(threading.Thread):
 	def __init__(self):
@@ -44,8 +47,9 @@ def _bgExec(func, *args, **kwargs):
 dll_file = "lib/nvdaHelperLocalWin10.dll"
 
 class SynthDriver(SynthDriver):
-	name = 'oneCore'
-	description = 'Windows OneCore voices'
+	name = "oneCore"
+	# Translators: Description for a speech synthesizer.
+	description = _("Windows OneCore voices")
 	supportedSettings = (SynthDriver.RateSetting(),)
 
 	@classmethod
@@ -77,19 +81,19 @@ class SynthDriver(SynthDriver):
 		self.event.set()
 
 	def _get_rate(self):
-		return self._paramToPercent(self._rate, minRate,maxRate)
+		return self._paramToPercent(self._rate, MIN_RATE, MAX_RATE)
 
-	def _set_rate(self,vl):
-		self._rate = self._percentToParam(vl,minRate,maxRate)
+	def _set_rate(self, val):
+		self._rate = self._percentToParam(val, MIN_RATE, MAX_RATE)
 		_bgExec(dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
-		global speaking, additional_text, marks
+		global speaking, additional_text
 		with lock:
+			log.info("Setting speaking to False")
 			speaking = False
 		clear_queue(bgQueue)
 		additional_text = []
-		marks = []
 		player.stop()
 
 	def speak(self, seq):
@@ -115,6 +119,7 @@ xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
 			if speaking:
 				additional_text.append(text)
 				return
+			log.info("Setting speaking to True")
 			speaking = True
 
 			dll.ocSpeech_speak(text)
@@ -125,6 +130,7 @@ xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
 @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 def callback(bytes, len, markers):
 		global speaking
+		log.info("speaking: %r" % speaking)
 		data = ctypes.string_at(bytes, len)
 		if markers:
 			markers = markers.split('|')
@@ -141,6 +147,8 @@ def callback(bytes, len, markers):
 			_bgExec(player.feed, data[44+(last*2):44+(t*2)])
 			_bgExec(set_last, int(name))
 			last = t
+		if not speaking:
+			return 0
 		_bgExec(player.feed, data[44+last*2:])
 		_bgExec(done)
 		return 0
@@ -153,10 +161,12 @@ def done():
 		global speaking, additional_text
 		with lock:
 			if speaking and not additional_text:
+				log.info("Speaking to False")
 				speaking = False
 				return
 			if speaking and additional_text:
 				t = additional_text.pop(0)
+				log.info("Pushing more")
 				_bgExec(dll.ocSpeech_speak, t)
 
 def clear_queue(queue):
