@@ -62,7 +62,7 @@ class SynthDriver(SynthDriver):
 		self._dll.ocSpeech_setProperty(u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
-		# Set a flag to tell the callback not to feed more audio.
+		# Set a flag to tell the callback not to push more audio.
 		self._wasCancelled = True
 		log.debug("Cancelling")
 		# There might be more text pending. Throw it away.
@@ -119,13 +119,13 @@ class SynthDriver(SynthDriver):
 			# 2 bytes per sample
 			# Order the equation so we don't have to do floating point.
 			pos = pos * 22050 * 2 / 10000000
-			# Feed audio up to this marker.
+			# Push audio up to this marker.
 			self._player.feed(data[last:pos])
 			# Indicate that we've reached this marker.
 			self.lastIndex = int(name)
 			last = pos
 		if self._wasCancelled:
-			log.debug("Cancelled, stopped feeding")
+			log.debug("Cancelled, stopped pushing audio")
 		else:
 			self._player.feed(data[last:])
 			log.debug("Done pushing audio")
