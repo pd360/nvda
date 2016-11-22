@@ -49,46 +49,21 @@ class SynthDriver(SynthDriver):
 		self._queuedSpeech = []
 		self._wasCancelled = False
 		self._isProcessing = False
-		self._bgQueue = Queue.Queue()
-		# Start a background thread.
-		# This thread makes synthesis calls and pushes audio.
-		self._bgThread = threading.Thread(target=self._bgThreadFunc)
-		self._bgThread.daemon = True
-		self._bgThread.start()
 		# Set initial rate.
 		self.rate = 40
 
 	def terminate(self):
 		super(SynthDriver, self).terminate()
-		# Signal to the background thread to exit.
-		self._bgExec(None)
 		# Drop the ctypes function instance for the callback,
 		# as it is holding a reference to an instance method, which causes a reference cycle.
 		self._callbackInst = None
-
-	def _bgThreadFunc(self):
-		while True:
-			log.debug("Waiting for queued function")
-			func, args, kwargs = self._bgQueue.get()
-			if not func:
-				log.debug("Exiting")
-				break
-			try:
-				log.debug("Running func %r" % func)
-				func(*args, **kwargs)
-			except:
-				log.error("Error running function from queue", exc_info=True)
-			self._bgQueue.task_done()
-
-	def _bgExec(self, func, *args, **kwargs):
-		self._bgQueue.put((func, args, kwargs))
 
 	def _get_rate(self):
 		return self._paramToPercent(self._rate, MIN_RATE, MAX_RATE)
 
 	def _set_rate(self, val):
 		self._rate = self._percentToParam(val, MIN_RATE, MAX_RATE)
-		self._bgExec(self._dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
+		self._dll.ocSpeech_setProperty(u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
 		with self._lock:
@@ -120,9 +95,12 @@ class SynthDriver(SynthDriver):
 			self._wasCancelled = False
 			log.debug("Begin processing speech")
 			self._isProcessing = True
-		self._bgExec(self._dll.ocSpeech_speak, text)
+		# ocSpeech_speak is async.
+		# It will call _callback in a background thread once done.
+		self._dll.ocSpeech_speak(text)
 
 	def _callback(self, bytes, len, markers):
+		# This gets called in a background thread.
 		if len > 44:
 			# Strip the first 44 bytes, as this seems to be noise.
 			bytes += 44
@@ -148,26 +126,25 @@ class SynthDriver(SynthDriver):
 			# Order the equation so we don't have to do floating point.
 			pos = pos * 22050 * 2 / 10000000
 			# Feed audio up to this marker.
-			self._bgExec(self._player.feed, data[last:pos])
+			self._player.feed(data[last:pos])
 			# Indicate that we've reached this marker.
-			self._bgExec(setattr, self, "lastIndex", int(name))
+			self.lastIndex = int(name)
 			last = pos
 		if self._wasCancelled:
 			log.debug("Cancelled, stopped feeding")
 		else:
-			self._bgExec(self._player.feed, data[last:])
+			self._player.feed(data[last:])
 			log.debug("Done pushing audio")
-		log.debug("Queuing _processNext")
-		self._bgExec(self._processNext)
+		self._processNext()
 		return 0
 
 	def _processNext(self):
-		log.debug("_processNext called")
 		with self._lock:
 			if self._queuedSpeech:
 				text = self._queuedSpeech.pop(0)
 				log.debug("Queued speech present, begin processing next")
 				self._wasCancelled = False
+				# ocSpeech_speak is async.
 				self._dll.ocSpeech_speak(text)
 			else:
 				log.debug("Done processing")
