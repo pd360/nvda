@@ -16,38 +16,13 @@ import speech
 MIN_RATE = -100
 MAX_RATE = 100
 
-dll = None
-lock = threading.RLock()
-queuedSpeech = []
-wasCancelled = False
-isProcessing = False
-lastindex = None
+SSML_TEMPLATE = (u'<speak version="1.0"'
+	' xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{lang}">'
+	'{text}'
+	'</speak>')
+ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 
-bgQueue = Queue.Queue()
-
-class BgThread(threading.Thread):
-	def __init__(self):
-		threading.Thread.__init__(self)
-		self.setDaemon(True)
-
-	def run(self):
-		while True:
-			log.debug("queue get")
-			func, args, kwargs = bgQueue.get()
-			if not func:
-				break
-			try:
-				log.debug("run func")
-				func(*args, **kwargs)
-			except:
-				log.error("Error running function from queue", exc_info=True)
-			bgQueue.task_done()
-
-def _bgExec(func, *args, **kwargs):
-	global bgQueue
-	bgQueue.put((func, args, kwargs))
-
-dll_file = "lib/nvdaHelperLocalWin10.dll"
+DLL_FILE = "lib/nvdaHelperLocalWin10.dll"
 
 class SynthDriver(SynthDriver):
 	name = "oneCore"
@@ -61,42 +36,68 @@ class SynthDriver(SynthDriver):
 
 	def __init__(self):
 		super(SynthDriver, self).__init__()
-		self.event = threading.Event()
-		self.bgt = BgThread()
-		self.bgt.start()
-		self.load_dll()
-		if not self.event.wait(4):
-			raise RuntimeError("Dll load failed or took too long")
-		global player
-		player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
+		self._dll = ctypes.windll[DLL_FILE]
+		self._dll.ocSpeech_getCurrentVoiceLanguage.restype = ctypes.c_wchar_p
+		self._dll.ocSpeech_initialize()
+		self._callbackInst = ocSpeech_Callback(self._callback)
+		self._dll.ocSpeech_setCallback(self._callbackInst)
+		self._dll.ocSpeech_getVoices.restype = ctypes.c_wchar_p
+		#voices = self._dll.ocSpeech_getVoices().split('|')
+		self._player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
+		# Initialize state.
+		self._lock = threading.RLock()
+		self._queuedSpeech = []
+		self._wasCancelled = False
+		self._isProcessing = False
+		self._bgQueue = Queue.Queue()
+		# Start a background thread.
+		# This thread makes synthesis calls and pushes audio.
+		self._bgThread = threading.Thread(target=self._bgThreadFunc)
+		self._bgThread.daemon = True
+		self._bgThread.start()
+		# Set initial rate.
 		self.rate = 40
 
-	def load_dll(self):
-		global dll
-		dll = ctypes.windll[dll_file]
-		dll.ocSpeech_getCurrentVoiceLanguage.restype = ctypes.c_wchar_p
-		dll.ocSpeech_initialize()
-		dll.ocSpeech_setCallback(callback)
-		dll.ocSpeech_getVoices.restype = ctypes.c_wchar_p
-		voices = dll.ocSpeech_getVoices().split('|')
-		for i, v in enumerate(voices):
-			print i, v
-		self.event.set()
+	def terminate(self):
+		super(SynthDriver, self).terminate()
+		# Signal to the background thread to exit.
+		self._bgExec(None)
+		# Drop the ctypes function instance for the callback,
+		# as it is holding a reference to an instance method, which causes a reference cycle.
+		self._callbackInst = None
+
+	def _bgThreadFunc(self):
+		while True:
+			log.debug("Waiting for queued function")
+			func, args, kwargs = self._bgQueue.get()
+			if not func:
+				log.debug("Exiting")
+				break
+			try:
+				log.debug("Running func %r" % func)
+				func(*args, **kwargs)
+			except:
+				log.error("Error running function from queue", exc_info=True)
+			self._bgQueue.task_done()
+
+	def _bgExec(self, func, *args, **kwargs):
+		self._bgQueue.put((func, args, kwargs))
 
 	def _get_rate(self):
 		return self._paramToPercent(self._rate, MIN_RATE, MAX_RATE)
 
 	def _set_rate(self, val):
 		self._rate = self._percentToParam(val, MIN_RATE, MAX_RATE)
-		_bgExec(dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
+		self._bgExec(self._dll.ocSpeech_setProperty, u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
-		global wasCancelled, queuedSpeech
-		with lock:
-			wasCancelled = True
+		with self._lock:
+			# Set a flag to tell the callback not to feed more audio.
+			self._wasCancelled = True
 			log.debug("Cancelling")
-			queuedSpeech = []
-		player.stop()
+			# There might be more text pending. Throw it away.
+			self._queuedSpeech = []
+		self._player.stop()
 
 	def speak(self, seq):
 		new = []
@@ -106,32 +107,24 @@ class SynthDriver(SynthDriver):
 			elif isinstance(item, speech.IndexCommand):
 				new.append('<mark name="%s"/>' % item.index)
 		text = u" ".join(new)
-		lang = dll.ocSpeech_getCurrentVoiceLanguage()
-		xml=u"""<speak version="1.0"
-xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='%s'>
-%s
-</speak>"""
-		text = xml % (lang, text)
-		global isProcessing, wasCancelled
-		with lock:
-			if isProcessing:
+		# OneCore speech barfs if you don't provide the language.
+		lang = self._dll.ocSpeech_getCurrentVoiceLanguage()
+		text = SSML_TEMPLATE.format(lang=lang, text=text)
+		with self._lock:
+			if self._isProcessing:
 				# We're already processing some speech, so queue this text.
 				# It'll be processed once the previous text is done.
 				log.debug("Already processing, queuing")
-				queuedSpeech.append(text)
+				self._queuedSpeech.append(text)
 				return
-			wasCancelled = False
+			self._wasCancelled = False
 			log.debug("Begin processing speech")
-			isProcessing = True
-		_bgExec(dll.ocSpeech_speak, text)
+			self._isProcessing = True
+		self._bgExec(self._dll.ocSpeech_speak, text)
 
-	def _get_lastIndex(self):
-		return lastindex
-
-@ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
-def callback(bytes, len, markers):
-		global wasCancelled, isProcessing
+	def _callback(self, bytes, len, markers):
 		if len > 44:
+			# Strip the first 44 bytes, as this seems to be noise.
 			bytes += 44
 			len -= 44
 		data = ctypes.string_at(bytes, len)
@@ -141,37 +134,41 @@ def callback(bytes, len, markers):
 			markers = []
 		last = 0
 
+		# Push audio up to each marker so we can sync the audio with the markers.
 		for marker in markers:
-			if wasCancelled:
+			if self._wasCancelled:
 				break
-			name, t = marker.split(':')
-			t = int(t)
-			t = int((22050.0/10000000)*t)
-			_bgExec(player.feed, data[last*2:t*2])
-			_bgExec(set_last, int(name))
-			last = t
-		if wasCancelled:
+			name, pos = marker.split(':')
+			pos = int(pos)
+			# pos is a time offset in 100-nanosecond units.
+			# Convert this to a byte offset.
+			# 10000000 100-nanosecond units in a second
+			# 22050 samples per second
+			# 2 bytes per sample
+			# Order the equation so we don't have to do floating point.
+			pos = pos * 22050 * 2 / 10000000
+			# Feed audio up to this marker.
+			self._bgExec(self._player.feed, data[last:pos])
+			# Indicate that we've reached this marker.
+			self._bgExec(setattr, self, "lastIndex", int(name))
+			last = pos
+		if self._wasCancelled:
 			log.debug("Cancelled, stopped feeding")
 		else:
-			_bgExec(player.feed, data[last*2:])
-			log.debug("Done feeding")
-		log.debug("Calling done")
-		_bgExec(done)
+			self._bgExec(self._player.feed, data[last:])
+			log.debug("Done pushing audio")
+		log.debug("Queuing _processNext")
+		self._bgExec(self._processNext)
 		return 0
 
-def set_last(x):
-	global lastindex
-	lastindex = x
-
-def done():
-		global isProcessing, wasCancelled
-		log.debug("Done called")
-		with lock:
-			if queuedSpeech:
-				text = queuedSpeech.pop(0)
+	def _processNext(self):
+		log.debug("_processNext called")
+		with self._lock:
+			if self._queuedSpeech:
+				text = self._queuedSpeech.pop(0)
 				log.debug("Queued speech present, begin processing next")
-				wasCancelled = False
-				dll.ocSpeech_speak(text)
+				self._wasCancelled = False
+				self._dll.ocSpeech_speak(text)
 			else:
 				log.debug("Done processing")
-				isProcessing = False
+				self._isProcessing = False
