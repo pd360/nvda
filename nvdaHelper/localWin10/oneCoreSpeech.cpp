@@ -99,15 +99,21 @@ int __stdcall ocSpeech_speak(OcSpeech* instance, char16 *text) {
 	return 0;
 }
 
-const wchar_t * __stdcall ocSpeech_getVoices(OcSpeech* instance) {
+BSTR __stdcall ocSpeech_getVoices(OcSpeech* instance) {
 	wstring voices;
 	for (int i = 0; i < instance->synth->AllVoices->Size; ++i) {
 		VoiceInformation^ info = instance->synth->AllVoices->GetAt(i);
 		voices += info->Id->Data();
+		voices += L":";
+		voices += info->DisplayName->Data();
 		if (i != instance->synth->AllVoices->Size - 1)
 			voices += L"|";
 	}
-	return voices.c_str();
+	return SysAllocString(voices.c_str());
+}
+
+const char16* __stdcall ocSpeech_getCurrentVoiceId(OcSpeech* instance) {
+	return instance->synth->Voice->Id->Data();
 }
 
 void __stdcall ocSpeech_setVoice(OcSpeech* instance, int index) {

@@ -3,8 +3,11 @@
 #This file is covered by the GNU General Public License.
 #See the file COPYING for more details.
 
+import os
+from collections import OrderedDict
 import ctypes
-from synthDriverHandler import SynthDriver
+import _winreg
+from synthDriverHandler import SynthDriver, VoiceInfo
 from logHandler import log
 import config
 import nvwave
@@ -21,11 +24,24 @@ ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int
 
 DLL_FILE = "lib/nvdaHelperLocalWin10.dll"
 
+def bstrReturn(address):
+	"""Handle a BSTR returned from a ctypes function call.
+	This includes freeing the memory.
+	"""
+	# comtypes.BSTR.from_address seems to cause a crash for some reason. Not sure why.
+	# Just access the string ourselves.
+	val = ctypes.wstring_at(address)
+	ctypes.windll.oleaut32.SysFreeString(address)
+	return val
+
 class SynthDriver(SynthDriver):
 	name = "oneCore"
 	# Translators: Description for a speech synthesizer.
 	description = _("Windows OneCore voices")
-	supportedSettings = (SynthDriver.RateSetting(),)
+	supportedSettings = (
+		SynthDriver.VoiceSetting(),
+		SynthDriver.RateSetting(),
+	)
 
 	@classmethod
 	def check(cls):
@@ -38,15 +54,15 @@ class SynthDriver(SynthDriver):
 		self._handle = self._dll.ocSpeech_initialize()
 		self._callbackInst = ocSpeech_Callback(self._callback)
 		self._dll.ocSpeech_setCallback(self._handle, self._callbackInst)
-		self._dll.ocSpeech_getVoices.restype = ctypes.c_wchar_p
-		#voices = self._dll.ocSpeech_getVoices(self._handle).split('|')
+		self._dll.ocSpeech_getVoices.restype = bstrReturn
+		self._dll.ocSpeech_getCurrentVoiceId.restype = ctypes.c_wchar_p
 		self._player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
 		# Initialize state.
 		self._queuedSpeech = []
 		self._wasCancelled = False
 		self._isProcessing = False
 		# Set initial rate.
-		self.rate = 40
+		self.rate = 50
 
 	def terminate(self):
 		super(SynthDriver, self).terminate()
@@ -143,3 +159,58 @@ class SynthDriver(SynthDriver):
 		else:
 			log.debug("Done processing")
 			self._isProcessing = False
+
+	def _getAvailableVoices(self, onlyValid=True):
+		voices = OrderedDict()
+		voicesStr = self._dll.ocSpeech_getVoices(self._handle).split('|')
+		for voiceStr in voicesStr:
+			id, name = voiceStr.split(":")
+			if onlyValid and not self._isVoiceValid(id):
+				continue
+			voices[id] = VoiceInfo(id, name)
+		return voices
+
+	def _isVoiceValid(self, id):
+		idParts = id.split('\\')
+		rootKey = getattr(_winreg, idParts[0])
+		subkey = "\\".join(idParts[1:])
+		try:
+			hkey = _winreg.OpenKey(rootKey, subkey)
+		except WindowsError as e:
+			log.debugWarning("Could not open registry key %s, %s" % (id, e))
+			return False
+		try:
+			langDataPath = _winreg.QueryValueEx(hkey, 'langDataPath')
+		except WindowsError as e:
+			log.debugWarning("Could not open registry value 'langDataPath', %s" % e)
+			return False
+		if not langDataPath or not isinstance(langDataPath[0], basestring):
+			log.debugWarning("Invalid langDataPath value")
+			return False
+		if not os.path.isfile(os.path.expandvars(langDataPath[0])):
+			log.debugWarning("Missing language data file: %s" % langDataPath[0])
+			return False
+		try:
+			voicePath = _winreg.QueryValueEx(hkey, 'voicePath')
+		except WindowsError as e:
+			log.debugWarning("Could not open registry value 'langDataPath', %s" % e)
+			return False
+		if not voicePath or not isinstance(voicePath[0],basestring):
+			log.debugWarning("Invalid voicePath value")
+			return False
+		if not os.path.isfile(os.path.expandvars(voicePath[0] + '.apm')):
+			log.debugWarning("Missing voice file: %s" % voicePath[0] + ".apm")
+			return False
+		return True
+
+	def _get_voice(self):
+		return self._dll.ocSpeech_getCurrentVoiceId(self._handle)
+
+	def _set_voice(self, id):
+		voices = self._getAvailableVoices(onlyValid=False)
+		for index, voice in enumerate(voices):
+			if voice == id:
+				break
+		else:
+			raise LookupError("No such voice: %s" % id)
+		self._dll.ocSpeech_setVoice(self._handle, index)

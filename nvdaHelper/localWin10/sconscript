@@ -54,6 +54,7 @@ localWin10Lib = env.SharedLibrary(
 		env['projectResFile'],
 		'oneCoreSpeech.cpp',
 	],
+	LIBS=["oleaut32"],
 )
 if signExec:
 	env.AddPostAction(localWin10Lib[0], [signExec])
