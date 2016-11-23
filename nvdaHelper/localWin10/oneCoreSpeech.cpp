@@ -1,5 +1,5 @@
 /*
-C++ code to provide access to Windows OneCore voices.
+Code for C dll bridge to Windows OneCore voices.
 This file is a part of the NVDA project.
 URL: http://www.nvaccess.org/
 Copyright 2016 Tyler Spivey, NV Access Limited.
@@ -36,10 +36,6 @@ ISpeechSynthesisUndocumented: IInspectable {
 	virtual HRESULT __stdcall SetVoicePropertyNum(HSTRING name, long value);
 };
 
-//Globals
-SpeechSynthesizer ^synth;
-ocSpeech_Callback callback;
-
 byte* getBytes(IBuffer^ buffer) {
 	// We want direct access to the buffer rather than copying it.
 	// To do this, we need to get to the IBufferByteAccess interface.
@@ -52,20 +48,26 @@ byte* getBytes(IBuffer^ buffer) {
 	return bytes;
 }
 
-void __stdcall ocSpeech_initialize() {
-	synth = ref new SpeechSynthesizer();
+OcSpeech* __stdcall ocSpeech_initialize() {
+	auto instance = new OcSpeech;
+	instance->synth = ref new SpeechSynthesizer();
+	return instance;
 }
 
-void __stdcall ocSpeech_setCallback(ocSpeech_Callback fn) {
-	callback = fn;
+void __stdcall ocSpeech_terminate(OcSpeech* instance) {
+	delete instance;
 }
 
-int __stdcall ocSpeech_speak(char16 *s) {
-	String ^text = ref new String(s);
+void __stdcall ocSpeech_setCallback(OcSpeech* instance, ocSpeech_Callback fn) {
+	instance->callback = fn;
+}
+
+int __stdcall ocSpeech_speak(OcSpeech* instance, char16 *text) {
+	String^ textStr = ref new String(text);
 	auto markersStr = make_shared<wstring>();
 	task<SpeechSynthesisStream ^>  speakTask;
 	try {
-		speakTask = create_task(synth->SynthesizeSsmlToStreamAsync(text));
+		speakTask = create_task(instance->synth->SynthesizeSsmlToStreamAsync(textStr));
 	} catch (Platform::Exception ^e) {
 		return -1;
 	}
@@ -81,11 +83,11 @@ int __stdcall ocSpeech_speak(char16 *s) {
 		}
 		auto t = create_task(speechStream->ReadAsync(buffer, speechStream->Size, Windows::Storage::Streams::InputStreamOptions::None));
 		return t;
-	}).then([markersStr] (IBuffer^ buffer) {
+	}).then([instance, markersStr] (IBuffer^ buffer) {
 		// Data has been read from the speech stream.
 		// Pass it to the callback.
 		byte *bytes = getBytes(buffer);
-		callback(bytes, buffer->Length, markersStr->c_str());
+		instance->callback(bytes, buffer->Length, markersStr->c_str());
 	}).then([] (task<void> previous) {
 		// Catch any unhandled exceptions that occurred during these tasks.
 		try {
@@ -97,24 +99,24 @@ int __stdcall ocSpeech_speak(char16 *s) {
 	return 0;
 }
 
-const wchar_t * __stdcall ocSpeech_getVoices() {
+const wchar_t * __stdcall ocSpeech_getVoices(OcSpeech* instance) {
 	wstring voices;
-	for (int i = 0; i < synth->AllVoices->Size; ++i) {
-		VoiceInformation^ info = synth->AllVoices->GetAt(i);
+	for (int i = 0; i < instance->synth->AllVoices->Size; ++i) {
+		VoiceInformation^ info = instance->synth->AllVoices->GetAt(i);
 		voices += info->Id->Data();
-		if (i != synth->AllVoices->Size - 1)
+		if (i != instance->synth->AllVoices->Size - 1)
 			voices += L"|";
 	}
 	return voices.c_str();
 }
 
-void __stdcall ocSpeech_setVoice(int index) {
-	synth->Voice = synth->AllVoices->GetAt(index);
+void __stdcall ocSpeech_setVoice(OcSpeech* instance, int index) {
+	instance->synth->Voice = instance->synth->AllVoices->GetAt(index);
 }
 
-void __stdcall ocSpeech_setProperty(char16 *name, long val) {
+void __stdcall ocSpeech_setProperty(OcSpeech* instance, char16 *name, long val) {
 	// In order to access boosted rates, we need to use an undocumented interface.
-	ComPtr<IInspectable> insp = reinterpret_cast<IInspectable*>(synth);
+	ComPtr<IInspectable> insp = reinterpret_cast<IInspectable*>(instance->synth);
 	ComPtr<ISpeechSynthesisUndocumented> undoc;
 	if (FAILED(insp.As(&undoc))) {
 		return;
@@ -127,6 +129,6 @@ void __stdcall ocSpeech_setProperty(char16 *name, long val) {
 	WindowsDeleteString(h);
 }
 
-const char16 * __stdcall ocSpeech_getCurrentVoiceLanguage() {
-	return synth->Voice->Language->Data();
+const char16 * __stdcall ocSpeech_getCurrentVoiceLanguage(OcSpeech* instance) {
+	return instance->synth->Voice->Language->Data();
 }

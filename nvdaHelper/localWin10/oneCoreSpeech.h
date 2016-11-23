@@ -1,5 +1,5 @@
 /*
-Header for C++ code to provide access to Windows OneCore voices.
+Header for C dll bridge to Windows OneCore voices.
 This file is a part of the NVDA project.
 URL: http://www.nvaccess.org/
 Copyright 2016 Tyler Spivey, NV Access Limited.
@@ -17,12 +17,18 @@ http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 #define export __declspec(dllexport) 
 
 typedef int (*ocSpeech_Callback)(byte* data, int length, const char16* markers);
+typedef struct {
+	Windows::Media::SpeechSynthesis::SpeechSynthesizer ^synth;
+	ocSpeech_Callback callback;
+} OcSpeech;
+
 extern "C" {
-void export __stdcall ocSpeech_initialize();
-void export __stdcall ocSpeech_setCallback(ocSpeech_Callback fn);
-export int __stdcall ocSpeech_speak(char16 *s);
-export const wchar_t * __stdcall ocSpeech_getVoices(void);
-export void __stdcall ocSpeech_setVoice(int i);
-export void __stdcall ocSpeech_setProperty(char16 *name, long val);
-export const char16 * __stdcall ocSpeech_getCurrentVoiceLanguage();
+export OcSpeech* __stdcall ocSpeech_initialize();
+export void __stdcall ocSpeech_terminate(OcSpeech* instance);
+export void __stdcall ocSpeech_setCallback(OcSpeech* instance, ocSpeech_Callback fn);
+export int __stdcall ocSpeech_speak(OcSpeech* instance, char16 *text);
+export const wchar_t * __stdcall ocSpeech_getVoices(OcSpeech* instance);
+export void __stdcall ocSpeech_setVoice(OcSpeech* instance, int index);
+export void __stdcall ocSpeech_setProperty(OcSpeech* instance, char16 *name, long val);
+export const char16* __stdcall ocSpeech_getCurrentVoiceLanguage(OcSpeech* instance);
 }

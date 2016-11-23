@@ -35,11 +35,11 @@ class SynthDriver(SynthDriver):
 		super(SynthDriver, self).__init__()
 		self._dll = ctypes.windll[DLL_FILE]
 		self._dll.ocSpeech_getCurrentVoiceLanguage.restype = ctypes.c_wchar_p
-		self._dll.ocSpeech_initialize()
+		self._handle = self._dll.ocSpeech_initialize()
 		self._callbackInst = ocSpeech_Callback(self._callback)
-		self._dll.ocSpeech_setCallback(self._callbackInst)
+		self._dll.ocSpeech_setCallback(self._handle, self._callbackInst)
 		self._dll.ocSpeech_getVoices.restype = ctypes.c_wchar_p
-		#voices = self._dll.ocSpeech_getVoices().split('|')
+		#voices = self._dll.ocSpeech_getVoices(self._handle).split('|')
 		self._player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
 		# Initialize state.
 		self._queuedSpeech = []
@@ -52,6 +52,7 @@ class SynthDriver(SynthDriver):
 		super(SynthDriver, self).terminate()
 		# Drop the ctypes function instance for the callback,
 		# as it is holding a reference to an instance method, which causes a reference cycle.
+		self._dll.ocSpeech_terminate(self._handle)
 		self._callbackInst = None
 
 	def _get_rate(self):
@@ -59,7 +60,7 @@ class SynthDriver(SynthDriver):
 
 	def _set_rate(self, val):
 		self._rate = self._percentToParam(val, MIN_RATE, MAX_RATE)
-		self._dll.ocSpeech_setProperty(u"MSTTS.SpeakRate", self._rate)
+		self._dll.ocSpeech_setProperty(self._handle, u"MSTTS.SpeakRate", self._rate)
 
 	def cancel(self):
 		# Set a flag to tell the callback not to push more audio.
@@ -78,7 +79,7 @@ class SynthDriver(SynthDriver):
 				new.append('<mark name="%s"/>' % item.index)
 		text = u" ".join(new)
 		# OneCore speech barfs if you don't provide the language.
-		lang = self._dll.ocSpeech_getCurrentVoiceLanguage()
+		lang = self._dll.ocSpeech_getCurrentVoiceLanguage(self._handle)
 		text = SSML_TEMPLATE.format(lang=lang, text=text)
 		if self._isProcessing:
 			# We're already processing some speech, so queue this text.
@@ -91,7 +92,7 @@ class SynthDriver(SynthDriver):
 		self._isProcessing = True
 		# ocSpeech_speak is async.
 		# It will call _callback in a background thread once done.
-		self._dll.ocSpeech_speak(text)
+		self._dll.ocSpeech_speak(self._handle, text)
 
 	def _callback(self, bytes, len, markers):
 		# This gets called in a background thread.
@@ -138,7 +139,7 @@ class SynthDriver(SynthDriver):
 			log.debug("Queued speech present, begin processing next")
 			self._wasCancelled = False
 			# ocSpeech_speak is async.
-			self._dll.ocSpeech_speak(text)
+			self._dll.ocSpeech_speak(self._handle, text)
 		else:
 			log.debug("Done processing")
 			self._isProcessing = False
