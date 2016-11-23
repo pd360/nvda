@@ -41,7 +41,9 @@ class CompoundTextInfo(textInfos.TextInfo):
 			# Aside from being pointless, we don't want a collapsed end object, as this will cause bogus control fields to be emitted.
 			try:
 				self._end, self._endObj = self._findNextContent(self._endObj, moveBack=True)
-				self._end.move(textInfos.UNIT_OFFSET, 1)
+				# _end is now on the last character, but we want it collapsed after this.
+				self._end.move(textInfos.UNIT_OFFSET, 1, endPoint="end")
+				self._end.collapse(end=True)
 			except LookupError:
 				pass
 
