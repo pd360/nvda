@@ -126,7 +126,8 @@ class SynthDriver(SynthDriver):
 			markers = markers.split('|')
 		else:
 			markers = []
-		last = 0
+		prevMarker = None
+		prevPos = 0
 
 		# Push audio up to each marker so we can sync the audio with the markers.
 		for marker in markers:
@@ -142,14 +143,19 @@ class SynthDriver(SynthDriver):
 			# Order the equation so we don't have to do floating point.
 			pos = pos * 22050 * 2 / 10000000
 			# Push audio up to this marker.
-			self._player.feed(data[last:pos])
-			# Indicate that we've reached this marker.
-			self.lastIndex = int(name)
-			last = pos
+			self._player.feed(data[prevPos:pos])
+			# _player.feed blocks until the previous chunk of audio is complete, not the chunk we just pushed.
+			# Therefore, indicate that we've reached the previous marker.
+			if prevMarker:
+				self.lastIndex = prevMarker
+			prevMarker = int(name)
+			prevPos = pos
 		if self._wasCancelled:
 			log.debug("Cancelled, stopped pushing audio")
 		else:
-			self._player.feed(data[last:])
+			self._player.feed(data[prevPos:])
+			if prevMarker:
+				self.lastIndex = prevMarker
 			log.debug("Done pushing audio")
 		self._processNext()
 		return 0
