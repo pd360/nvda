@@ -15,6 +15,8 @@ import speech
 
 MIN_RATE = -100
 MAX_RATE = 100
+MIN_PITCH = -100
+MAX_PITCH = 100
 
 SSML_TEMPLATE = (u'<speak version="1.0"'
 	' xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{lang}">'
@@ -41,6 +43,7 @@ class SynthDriver(SynthDriver):
 	supportedSettings = (
 		SynthDriver.VoiceSetting(),
 		SynthDriver.RateSetting(),
+		SynthDriver.PitchSetting(),
 	)
 
 	@classmethod
@@ -61,8 +64,10 @@ class SynthDriver(SynthDriver):
 		self._queuedSpeech = []
 		self._wasCancelled = False
 		self._isProcessing = False
-		# Set initial rate.
+		# Set initial values for parameters that can't be queried.
+		# This initialises our cache for the value.
 		self.rate = 50
+		self.pitch = 50
 
 	def terminate(self):
 		super(SynthDriver, self).terminate()
@@ -214,3 +219,10 @@ class SynthDriver(SynthDriver):
 		else:
 			raise LookupError("No such voice: %s" % id)
 		self._dll.ocSpeech_setVoice(self._handle, index)
+
+	def _get_pitch(self):
+		return self._paramToPercent(self._pitch, MIN_PITCH, MAX_PITCH)
+
+	def _set_pitch(self, val):
+		self._pitch = self._percentToParam(val, MIN_PITCH, MAX_PITCH)
+		self._dll.ocSpeech_setProperty(self._handle, u"MSTTS.Pitch", self._pitch)
