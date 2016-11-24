@@ -99,6 +99,9 @@ int __stdcall ocSpeech_speak(OcSpeech* instance, char16 *text) {
 	return 0;
 }
 
+// We use BSTR because we need the string to stay around until the client is done with it
+// but the caller then needs to free it.
+// We can't just use malloc because the caller might be using a different CRT.
 BSTR __stdcall ocSpeech_getVoices(OcSpeech* instance) {
 	wstring voices;
 	for (int i = 0; i < instance->synth->AllVoices->Size; ++i) {
