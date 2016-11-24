@@ -12,16 +12,13 @@ from logHandler import log
 import config
 import nvwave
 import speech
+import speechXml
 
 MIN_RATE = -100
 MAX_RATE = 100
 MIN_PITCH = -100
 MAX_PITCH = 100
 
-SSML_TEMPLATE = (u'<speak version="1.0"'
-	' xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{lang}">'
-	'{text}'
-	'</speak>')
 ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 
 DLL_FILE = "lib/nvdaHelperLocalWin10.dll"
@@ -91,17 +88,8 @@ class SynthDriver(SynthDriver):
 		self._queuedSpeech = []
 		self._player.stop()
 
-	def speak(self, seq):
-		new = []
-		for item in seq:
-			if isinstance(item, basestring):
-				new.append(item.replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;'))
-			elif isinstance(item, speech.IndexCommand):
-				new.append('<mark name="%s"/>' % item.index)
-		text = u" ".join(new)
-		# OneCore speech barfs if you don't provide the language.
-		lang = self._dll.ocSpeech_getCurrentVoiceLanguage(self._handle)
-		text = SSML_TEMPLATE.format(lang=lang, text=text)
+	def speak(self, speechSequence):
+		text = speechXml.SsmlConverter(speechSequence, self.language).convert()
 		if self._isProcessing:
 			# We're already processing some speech, so queue this text.
 			# It'll be processed once the previous text is done.
@@ -232,3 +220,6 @@ class SynthDriver(SynthDriver):
 	def _set_pitch(self, val):
 		self._pitch = self._percentToParam(val, MIN_PITCH, MAX_PITCH)
 		self._dll.ocSpeech_setProperty(self._handle, u"MSTTS.Pitch", self._pitch)
+
+	def _get_language(self):
+		return self._dll.ocSpeech_getCurrentVoiceLanguage(self._handle)
