@@ -18,6 +18,13 @@ MIN_RATE = -100
 MAX_RATE = 100
 MIN_PITCH = -100
 MAX_PITCH = 100
+SAMPLES_PER_SEC = 22050
+BITS_PER_SAMPLE = 16
+BYTES_PER_SEC = SAMPLES_PER_SEC * (BITS_PER_SAMPLE / 8)
+#: The number of 100-nanosecond units in 1 second.
+HUNDRED_NS_PER_SEC = 10000000 # 1000000000 ns per sec / 100 ns
+#: The number of bytes to strip from the start of the speech output.
+STRIP_OUT_START_LEN = 44
 
 ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 
@@ -56,7 +63,7 @@ class SynthDriver(SynthDriver):
 		self._dll.ocSpeech_setCallback(self._handle, self._callbackInst)
 		self._dll.ocSpeech_getVoices.restype = bstrReturn
 		self._dll.ocSpeech_getCurrentVoiceId.restype = ctypes.c_wchar_p
-		self._player = nvwave.WavePlayer(1, 22050, 16, outputDevice=config.conf["speech"]["outputDevice"])
+		self._player = nvwave.WavePlayer(1, SAMPLES_PER_SEC, BITS_PER_SAMPLE, outputDevice=config.conf["speech"]["outputDevice"])
 		# Initialize state.
 		self._queuedSpeech = []
 		self._wasCancelled = False
@@ -105,10 +112,10 @@ class SynthDriver(SynthDriver):
 
 	def _callback(self, bytes, len, markers):
 		# This gets called in a background thread.
-		if len > 44:
+		if len > STRIP_OUT_START_LEN:
 			# Strip the first 44 bytes, as this seems to be noise.
-			bytes += 44
-			len -= 44
+			bytes += STRIP_OUT_START_LEN
+			len -= STRIP_OUT_START_LEN
 		data = ctypes.string_at(bytes, len)
 		if markers:
 			markers = markers.split('|')
@@ -125,11 +132,8 @@ class SynthDriver(SynthDriver):
 			pos = int(pos)
 			# pos is a time offset in 100-nanosecond units.
 			# Convert this to a byte offset.
-			# 10000000 100-nanosecond units in a second
-			# 22050 samples per second
-			# 2 bytes per sample
 			# Order the equation so we don't have to do floating point.
-			pos = pos * 22050 * 2 / 10000000
+			pos = pos * BYTES_PER_SEC / HUNDRED_NS_PER_SEC
 			# Push audio up to this marker.
 			self._player.feed(data[prevPos:pos])
 			# _player.feed blocks until the previous chunk of audio is complete, not the chunk we just pushed.
