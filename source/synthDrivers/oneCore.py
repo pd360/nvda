@@ -58,6 +58,9 @@ class _OcSsmlConverter(speechXml.SsmlConverter):
 		# Therefore, we don't use it.
 		pass
 
+class _PitchChange(int):
+	"Used to signal a pitch change in the speech queue."
+
 class SynthDriver(SynthDriver):
 	name = "oneCore"
 	# Translators: Description for a speech synthesizer.
@@ -116,18 +119,31 @@ class SynthDriver(SynthDriver):
 
 	def speak(self, speechSequence):
 		text = _OcSsmlConverter(speechSequence, self.language, self._volume).convert()
-		if self._isProcessing:
-			# We're already processing some speech, so queue this text.
-			# It'll be processed once the previous text is done.
-			log.debug("Already processing, queuing")
-			self._queuedSpeech.append(text)
-			return
-		self._wasCancelled = False
-		log.debug("Begin processing speech")
-		self._isProcessing = True
-		# ocSpeech_speak is async.
-		# It will call _callback in a background thread once done.
-		self._dll.ocSpeech_speak(self._handle, text)
+		self._queueSpeech(text)
+
+	def _queueSpeech(self, item):
+		self._queuedSpeech.append(item)
+		# We only process the queue here if it isn't already being processed.
+		if not self._isProcessing:
+			self._processQueue()
+
+	def _processQueue(self):
+		while self._queuedSpeech:
+			item = self._queuedSpeech.pop(0)
+			if isinstance(item, basestring): # Text
+				self._wasCancelled = False
+				log.debug("Begin processing speech")
+				self._isProcessing = True
+				# ocSpeech_speak is async.
+				# It will call _callback in a background thread once done,
+				# which will eventually process the queue again.
+				self._dll.ocSpeech_speak(self._handle, item)
+				return
+			elif isinstance(item, _PitchChange):
+				log.debug("Requesting pitch change")
+				self._dll.ocSpeech_setProperty(self._handle, u"MSTTS.Pitch", item)
+		log.debug("Queue empty, done processing")
+		self._isProcessing = False
 
 	def _callback(self, bytes, len, markers):
 		# This gets called in a background thread.
@@ -168,19 +184,8 @@ class SynthDriver(SynthDriver):
 			if prevMarker:
 				self.lastIndex = prevMarker
 			log.debug("Done pushing audio")
-		self._processNext()
+		self._processQueue()
 		return 0
-
-	def _processNext(self):
-		if self._queuedSpeech:
-			text = self._queuedSpeech.pop(0)
-			log.debug("Queued speech present, begin processing next")
-			self._wasCancelled = False
-			# ocSpeech_speak is async.
-			self._dll.ocSpeech_speak(self._handle, text)
-		else:
-			log.debug("Done processing")
-			self._isProcessing = False
 
 	def _getAvailableVoices(self, onlyValid=True):
 		voices = OrderedDict()
@@ -242,7 +247,8 @@ class SynthDriver(SynthDriver):
 
 	def _set_pitch(self, val):
 		self._pitch = self._percentToParam(val, MIN_PITCH, MAX_PITCH)
-		self._dll.ocSpeech_setProperty(self._handle, u"MSTTS.Pitch", self._pitch)
+		# Pitch changes must be ordered with text, so use the queue.
+		self._queueSpeech(_PitchChange(self._pitch))
 
 	def _get_language(self):
 		return self._dll.ocSpeech_getCurrentVoiceLanguage(self._handle)
