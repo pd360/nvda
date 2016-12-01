@@ -3,6 +3,9 @@
 #This file is covered by the GNU General Public License.
 #See the file COPYING for more details.
 
+"""Synth driver for Windows OneCore voices.
+"""
+
 import os
 from collections import OrderedDict
 import ctypes
@@ -25,9 +28,7 @@ BYTES_PER_SEC = SAMPLES_PER_SEC * (BITS_PER_SAMPLE / 8)
 HUNDRED_NS_PER_SEC = 10000000 # 1000000000 ns per sec / 100 ns
 #: The number of bytes to strip from the start of the speech output.
 STRIP_OUT_START_LEN = 44
-
 ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
-
 DLL_FILE = "lib/nvdaHelperLocalWin10.dll"
 
 def bstrReturn(address):
@@ -40,6 +41,23 @@ def bstrReturn(address):
 	ctypes.windll.oleaut32.SysFreeString(address)
 	return val
 
+class _OcSsmlConverter(speechXml.SsmlConverter):
+
+	def __init__(self, speechSequence, defaultLanguage, volume):
+		super(_OcSsmlConverter, self).__init__(speechSequence, defaultLanguage)
+		self._volume = volume
+		self.convertVolumeCommand(speech.VolumeCommand(multiplier=1))
+
+	def convertVolumeCommand(self, command):
+		# Even the base volume must be set via SSML.
+		val = self._volume * command.multiplier
+		self.setAttr("prosody", "volume", val)
+
+	def convertCharacterModeCommand(self, command):
+		# OneCore's character speech sounds weird and doesn't support pitch alteration.
+		# Therefore, we don't use it.
+		pass
+
 class SynthDriver(SynthDriver):
 	name = "oneCore"
 	# Translators: Description for a speech synthesizer.
@@ -48,6 +66,7 @@ class SynthDriver(SynthDriver):
 		SynthDriver.VoiceSetting(),
 		SynthDriver.RateSetting(),
 		SynthDriver.PitchSetting(),
+		SynthDriver.VolumeSetting(),
 	)
 
 	@classmethod
@@ -96,7 +115,7 @@ class SynthDriver(SynthDriver):
 		self._player.stop()
 
 	def speak(self, speechSequence):
-		text = speechXml.SsmlConverter(speechSequence, self.language).convert()
+		text = _OcSsmlConverter(speechSequence, self.language, self._volume).convert()
 		if self._isProcessing:
 			# We're already processing some speech, so queue this text.
 			# It'll be processed once the previous text is done.
@@ -227,3 +246,10 @@ class SynthDriver(SynthDriver):
 
 	def _get_language(self):
 		return self._dll.ocSpeech_getCurrentVoiceLanguage(self._handle)
+
+	def _get_volume(self):
+		return self._volume
+
+	def _set_volume(self, val):
+		# This is set via SSML.
+		self._volume = val
