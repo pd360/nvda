@@ -259,3 +259,6 @@ class SynthDriver(SynthDriver):
 	def _set_volume(self, val):
 		# This is set via SSML.
 		self._volume = val
+
+	def pause(self, switch):
+		self._player.pause(switch)
