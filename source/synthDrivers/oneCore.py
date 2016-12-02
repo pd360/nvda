@@ -26,8 +26,7 @@ BITS_PER_SAMPLE = 16
 BYTES_PER_SEC = SAMPLES_PER_SEC * (BITS_PER_SAMPLE / 8)
 #: The number of 100-nanosecond units in 1 second.
 HUNDRED_NS_PER_SEC = 10000000 # 1000000000 ns per sec / 100 ns
-#: The number of bytes to strip from the start of the speech output.
-STRIP_OUT_START_LEN = 44
+WAV_HEADER_LEN = 44
 ocSpeech_Callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 DLL_FILE = "lib/nvdaHelperLocalWin10.dll"
 
@@ -94,6 +93,7 @@ class SynthDriver(SynthDriver):
 		# This initialises our cache for the value.
 		self.rate = 50
 		self.pitch = 50
+		self.volume = 100
 
 	def terminate(self):
 		super(SynthDriver, self).terminate()
@@ -147,10 +147,10 @@ class SynthDriver(SynthDriver):
 
 	def _callback(self, bytes, len, markers):
 		# This gets called in a background thread.
-		if len > STRIP_OUT_START_LEN:
-			# Strip the first 44 bytes, as this seems to be noise.
-			bytes += STRIP_OUT_START_LEN
-			len -= STRIP_OUT_START_LEN
+		# Strip the wav header.
+		assert len > WAV_HEADER_LEN
+		bytes += WAV_HEADER_LEN
+		len -= WAV_HEADER_LEN
 		data = ctypes.string_at(bytes, len)
 		if markers:
 			markers = markers.split('|')
