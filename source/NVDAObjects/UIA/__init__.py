@@ -11,6 +11,7 @@ from comtypes.automation import VARIANT
 import weakref
 import sys
 import numbers
+import languageHandler
 import UIAHandler
 import globalVars
 import eventHandler
@@ -135,6 +136,13 @@ class UIATextInfo(textInfos.TextInfo):
 			annotationTypes=getUIATextAttributeValueFromRange(range,UIAHandler.UIA_AnnotationTypesAttributeId,ignoreMixedValues=ignoreMixedValues)
 			if annotationTypes==UIAHandler.AnnotationType_SpellingError:
 				formatField["invalid-spelling"]=True
+		cultureVal=getUIATextAttributeValueFromRange(range,UIAHandler.UIA_CultureAttributeId,ignoreMixedValues=ignoreMixedValues)
+		if cultureVal and isinstance(cultureVal,int):
+			try:
+				formatField['language']=languageHandler.windowsLCIDToLocaleName(cultureVal)
+			except:
+				log.debugWarning("language error",exc_info=True)
+				pass
 		return textInfos.FieldCommand("formatChange",formatField)
 
 	def __init__(self,obj,position,_rangeObj=None):
@@ -776,19 +784,25 @@ class UIA(Window):
 			return ""
 
 	def _get_keyboardShortcut(self):
-		ret = ""
+		# Build the keyboard shortcuts list early for readability.
+		shortcuts = []
 		try:
-			ret += self.UIAElement.currentAccessKey
-		except COMError:
+			accessKey = self.UIAElement.currentAccessKey
+			# #6779: Don't add access key to the shortcut list if UIA says access key is None, resolves concatenation error in focus events, object navigation and so on.
+			# In rare cases, access key itself is None.
+			if accessKey:
+				shortcuts.append(accessKey)
+		except COMError, AttributeError:
 			pass
-		if ret:
-			#add a double space to the end of the string
-			ret +="  "
 		try:
-			ret += self.UIAElement.currentAcceleratorKey
-		except COMError:
+			acceleratorKey = self.UIAElement.currentAcceleratorKey
+			# Same case as access key.
+			if acceleratorKey:
+				shortcuts.append(acceleratorKey)
+		except COMError, AttributeError:
 			pass
-		return ret
+		# #6790: Do not add two spaces unless both access key and accelerator are present in order to not waste string real estate.
+		return "  ".join(shortcuts) if shortcuts else ""
 
 	def _get_UIACachedStatesElement(self):
 		statesCacheRequest=UIAHandler.handler.clientObject.createCacheRequest()
